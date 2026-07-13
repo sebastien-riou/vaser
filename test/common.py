@@ -23,35 +23,28 @@ def parse_test_args():
     logging.basicConfig(level=args.log_level, format=logformat, datefmt=logdatefmt)
     return args.helper
 
-def check_test_case(args, finalized, **kwargs):
-    # check the args are correctly registered
-    args_check = []
-    for i in range(len(finalized.units)):
-        args_check += [x['size'] for x in finalized.units[i]['args']]
-    logging.info(f'args_check: {args_check}')
-    ai = 0
-    for a in args:
-        remaining = a
-        while remaining > 0:
-            remaining -= args_check[ai]
-            ai += 1
-            if remaining < 0:
-                raise RuntimeError()
-            if ai > len(args_check):
-                raise RuntimeError()
-    if ai < len(args_check):
+def check_test_case(args, chunk,*, fragment=False, last=True, **kwargs):
+    if chunk.args != args:
+        logging.error(f'args:       {args}')
+        logging.error(f'chunk.args: {chunk.args}')
+        raise RuntimeError()
+    if fragment != chunk.fragment:
+        logging.error(f'fragment:       {fragment}')
+        logging.error(f'chunk.fragment: {chunk.fragment}')
+        raise RuntimeError()
+    if last != chunk.last:
         raise RuntimeError()
     
-    logging.info(f'bytes: {Utils.hexstr(finalized.bytes)}')
+    logging.info(f'bytes: {Utils.hexstr(chunk.bytes)}')
     
     # check the serialized version can be decoded and match the original
-    raw_bytes = finalized.bytes
-    logging.info(f'{Utils.hexstr(raw_bytes)}')
+    raw_bytes = chunk.bytes
     decoded = Vaser.decode(raw_bytes, **kwargs)
-    logging.info(f'decoded: {Utils.hexstr(decoded.bytes)}')
+    logging.debug(f'decoded: {Utils.hexstr(decoded.bytes)}')
     logging.info(f'decoded: {decoded.args}')
-    for i in range(len(finalized.units)):
-        if finalized.units[i]['args'] != decoded.units[i]['args']:
-            logging.debug(f"finalized.units[{i}]['args']: {finalized.units[i]['args']}")
-            logging.debug(f"decoded.units[{i}]['args']:   {decoded.units[i]['args']}")
-            raise RuntimeError()    
+    if decoded.args != args:
+        raise RuntimeError()
+    if fragment != decoded.fragment:
+        raise RuntimeError()
+    if last != decoded.last:
+        raise RuntimeError()

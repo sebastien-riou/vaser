@@ -1,6 +1,7 @@
 import logging
 import io
 from typing import override
+from pysatl import Utils
 
 class VaserUnitOverflowError(RuntimeError):
     def __init__(self,msg,max_size):
@@ -11,12 +12,9 @@ class VaserInvalidFlagsError(RuntimeError):
     pass
 
 class Vaser(object):
-    GROUP_WIDTH = 6       
+    GROUP_WIDTH = 7 # work with full bytes (VLQ unit is GROUP_WIDTH + 1 for the 'stop' bit)  
+    VLQ_UNIT =  GROUP_WIDTH + 1    
     
-    @property
-    def unit(self):
-        return self._unit
-
     @property
     def fragment(self):
         return self._fragment
@@ -26,44 +24,29 @@ class Vaser(object):
         return self._last
     
     @property
-    def units(self):
-        return self._units
-    
-    @property
     def args(self):
-        args = []
-        for i in range(len(self._units)):
-            args += [x['size'] for x in self._units[i]['args']]
-        if self._args:
-            args += self._args
-        return args
+        return self._args
 
     @property
     def bytes(self):
         if self._bytes is None:
-            b = bytearray()
-            for u in self._units:
-                b += u['bytes']
-            self._bytes = bytes(b)
+            return self._args_to_bytes()
         return self._bytes
 
-    def __init__(self, sizes=None,* , unit=64, check=True, group_width: int|None = None):
-        if group_width is None:
-            group_width = self.GROUP_WIDTH
-        self._group_width = group_width
-        self._unit = unit
+    def __init__(self, sizes=None):
+        self._group_width = self.GROUP_WIDTH
         self._args = []
-        self._fragment = False
-        self._last = False
+        self._fragment = None
+        self._last = None
         self._units = []
         self._bytes = None
         if sizes:
-            self.add(sizes, check=check)
+            self.add(sizes)
 
-    def add(self, sizes, *, fragment=False, check=True):
-        if self._fragment:
+    def add(self, sizes, *, fragment=None):
+        if self._fragment is not None:
             raise RuntimeError('Cannot add an argument after a fragmented one')
-        if self._last:
+        if self._last is not None:
             raise RuntimeError('Cannot add an argument after a last one')
         try:
             _iterator = iter(sizes)
@@ -72,73 +55,45 @@ class Vaser(object):
             sizes = [sizes]
         self._bytes = None
         for size in sizes:
-            self._args.append({'size':size,'fragment':fragment,'last':False})
-            if check:
-                try:
-                    self._args_to_bytes()
-                except VaserUnitOverflowError as e:
-                    self._args.pop()
-                    size_1 = e.max_size
-                    if size_1 > 0:
-                        logging.debug('Auto split: create fragment')
-                        size_2 = size - size_1
-                        self._args.append({'size':size_1,'fragment':True,'last':False})
-                    else:
-                        logging.debug('Auto split: add arg fully in new unit')
-                        size_2 = size
-                    logging.debug(f'Auto split: size_1=0x{size_1:x}, size_2=0x{size_2:x}')
-                    encoding = self._args_to_bytes(finalize_unit=True)
-                    self._units.append({'args':self._args, 'bytes':encoding})
-                    self._args = []
-                    self._args.append({'size':size_2,'fragment':fragment,'last':False})
+            self._args.append(size)
+        if fragment is not None:
+            self._fragment = fragment
     
-    def finalize(self, *, fragment=False) -> bytes:
-        if self._fragment:
-            raise RuntimeError('Cannot add an argument after a fragmented one')
+    def finalize(self, *, fragment=None) -> bytes:
         if self._last:
-            raise RuntimeError('Cannot add an argument after a last one')
-        last = not fragment
-        self._args[-1]['fragment']=fragment   
-        self._args[-1]['last']=last
-        encoding = self._args_to_bytes()
-        self._units.append({'args':self._args, 'bytes':encoding})
-        self._args = None
-        self._fragment = fragment
-        self._last = last
-        self._bytes = None
+            raise RuntimeError('Already finalized')
+        if self._fragment is not None and fragment is not None:
+            raise RuntimeError('Fragment already set')
+        if self._fragment is None and fragment is not None:
+            self._fragment = fragment  
+        if self._fragment is None:
+            self._fragment = False 
+        self._last = not self._fragment
+        self._bytes = self._args_to_bytes()
         return self.bytes
     
     def _n_groups(self, width: int) -> int:
-        return (width + self._group_width - 1) // self._group_width
+        return max(1,(width + self._group_width - 1) // self._group_width)
 
     def _group_mask(self) -> int:
         return (1 << self._group_width) - 1
 
-    def _max_size(self,size,overflow):
-        n_groups_ov = self._n_groups(overflow)
-        n_groups = self._n_groups(size.bit_length())
-        if n_groups <= n_groups_ov:
-            return 0 # must mark previous as last in unit
-        n_groups -= n_groups_ov
-        max_width = n_groups * self._group_width
-        max_size = (1 << max_width) - 1
-        return max_size
-
-    def _encode_size(self, size: int):
+    def _encode_size(self, value: int):
         p = 0
         out = 0
         # encode size by group of x bits
-        width = size.bit_length()
+        width = value.bit_length()
         n_groups = self._n_groups(width)
-        logging.debug(f'width = {width}, n_groups = {n_groups}')
         mask = self._group_mask()
+        v = value
         for i in range(n_groups):
-            g = size & mask
+            g = v & mask
             logging.debug(f'group {i}: g = 0x{g:x}')
-            size = size >> self._group_width
+            v = v >> self._group_width
             out |= g << p 
             p += self._group_width + 1
         out |= 1 << (p-1) # mark the last group as such
+        logging.debug(f'value = {value}, width = {width}, n_groups = {n_groups}, out = {Utils.hexstr(out.to_bytes((p+7)//8,byteorder='little'))}')
         return out, p
     
     def _decode_size(self, dat):
@@ -166,75 +121,59 @@ class Vaser(object):
     def _args_to_bytes(self, *,finalize_unit=False):
         logging.debug(f'----- args_to_bytes START -----')
         logging.debug(f'self._args: {self._args}')
-        out = 0 # 0 encode 'no argument'
+        out = 0
         p = 0
+        nao,nap = self._encode_size(len(self._args))
+        out = nao
+        p = nap
+        flags = 0
+        if self._fragment:
+            flags |= 1
+        if self._last:
+            flags |= 2
+        fo,fp = self._encode_size(flags)
+        out |= fo << p
+        p += fp
         for i in range(len(self._args)):
-            size = self._args[i]['size']
-            fragment = self._args[i]['fragment']
-            last = self._args[i]['last']
+            size = self._args[i]
             so,sp = self._encode_size(size)
             out |= so << p
             p += sp
-            # encode 'last in unit'
-            last_in_unit = fragment or last or (i+1 == len(self._args) and finalize_unit)
-            if last_in_unit:
-                out |= 1 << p
-            p += 1
-            logging.debug(f'size = {size}, last_in_unit = {last_in_unit}, p = {p}, fragment = {fragment}, last = {last}')
-        if len(self._args) > 0:
-            if fragment:
-                out |= 1 << (self._unit - 2)
-            p += 1
-            if not fragment:
-                if last:
-                    out |= 1 << (self._unit - 1)   
-            spare_bits =  self._unit - 2 - p
-            logging.debug(f'Spare bits: {spare_bits}')
-            if spare_bits < 0:
-                max_size = self._max_size(size, -spare_bits)
-                logging.debug(f'Max size: {max_size}')
-                raise VaserUnitOverflowError(f'Cannot fit into {self._unit} bits',max_size)
+            logging.debug(f'size = {size}, p = {p}')
+        logging.debug(f'nap = {nap}, fp = {fp}, p = {p}')
+        for i in [nap,fp,p]:
+            if 0 != i % self.VLQ_UNIT:
+                raise RuntimeError()
+        payload_size = (p + 7) // 8
+        logging.debug(f'payload_size = {payload_size}')
+        pso,psp = self._encode_size(payload_size)
+        out = (out << psp) | pso         
+        out_size = (( psp + 7) // 8) + payload_size  
         logging.debug(f'----- args_to_bytes END -----')
-        return out.to_bytes(8,byteorder='little') 
+        return out.to_bytes(out_size,byteorder='little') 
     
     @classmethod
     def decode(cls, raw_bytes, **kwargs):
         logging.debug(f'----- decode START -----')
         out = cls(**kwargs)
-        unit = out.unit
-        logging.debug(f'decode: unit = {unit}')
-        if unit != 64:
-            raise RuntimeError()
-        bytes_per_unit = unit // 8
-        n_units = len(raw_bytes) // bytes_per_unit
-        if n_units * bytes_per_unit != len(raw_bytes):
-            raise RuntimeError()
-        src = io.BytesIO(raw_bytes)
-        for u in range(n_units):
-            args = []
-            rbytes = src.read(bytes_per_unit)
-            dat = int.from_bytes(rbytes,byteorder='little')
-            fragment = (dat >> (unit - 2)) & 1
-            last = (dat >> (unit - 1)) & 1
-            logging.debug(f'unit {u}: fragment = {fragment}, last = {last}, dat = 0x{dat:x}')
-            if fragment and last:
-                raise VaserInvalidFlagsError()
-            p = 0
-            while p < unit:
-                size,sp = out._decode_size(dat)
-                dat = dat >> sp 
-                p += sp
-                last_in_unit = dat & 1
-                p += 1
-                dat = dat >> 1
-                logging.debug(f'add arg, p = {p}, size = {size}, last_in_unit = {last_in_unit}')
-                args.append(size)
-                if last_in_unit:
-                    break
-            for a in args[:-1]:
-                out.add(a)
-            out.add(args[-1],fragment=fragment)
-        out.finalize(fragment=fragment)
+        raw_bits = int.from_bytes(raw_bytes, byteorder='little')
+        def read_vlq() -> int:
+            nonlocal raw_bits
+            v,p = out._decode_size(raw_bits)
+            raw_bits = raw_bits >> p
+            return v
+        payload_size = read_vlq()
+        n_values = read_vlq()
+        flags = read_vlq() 
+        fragment = flags & 1
+        last = flags & 2
+        logging.debug(f'fragment: {fragment}, last: {last}')
+        for i in range(n_values): 
+            a = read_vlq()
+            logging.debug(f'arg {i}: {a}')
+            out.add(a)            
+        if last or fragment:
+            out.finalize(fragment=fragment)
         logging.debug(f'----- decode END -----')
         return out
 
