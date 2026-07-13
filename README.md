@@ -10,3 +10,13 @@ Features:
 - The protocol parameters can be optimized for sending mostly 'small' values or large ones
 
 The main use case is custom RPC protocols.
+
+Stream layout:
+- header:
+    - size of payload, in bytes, using VLQ encoding
+- payload:
+    - number of values in this chunk, using VLQ encoding
+    - flags, using VLQ encoding:
+        - fragment bit: 1 when last value is fragmented, i.e. this chunk contains only part of it
+        - last bit: 1 when last value is the last of the whole list
+    - values: encoded using VLQ
