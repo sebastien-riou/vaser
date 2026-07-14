@@ -1,65 +1,106 @@
+"""Compact VLQ-style serialization helpers for integer values.
+
+This module provides a small encoder/decoder for sequences of integer values
+that can be serialized into bytes and reconstructed later.
+"""
+
 import logging
 
 
-class VaserUnitOverflowError(RuntimeError):
-    def __init__(self, msg, max_size):
-        super().__init__(msg)
-        self.max_size = max_size
-
-
 class VaserInvalidFlagsError(RuntimeError):
+    """Raised when invalid fragment or finalization flags are encountered."""
+
     pass
 
 
 class Vaser:
+    """Encode and decode sequences of integer values into a compact byte format.
+
+    The encoder stores a list of integer values and serializes them using a
+    variable-length quantity (VLQ) scheme. It can also reconstruct a decoded
+    instance from previously encoded bytes.
+    """
     GROUP_WIDTH = 7  # work with full bytes (VLQ unit is GROUP_WIDTH + 1 for the 'stop' bit)
     VLQ_UNIT = GROUP_WIDTH + 1
 
     @property
     def fragment(self):
+        """Return whether the payload is marked as fragmented."""
         return self._fragment
 
     @property
     def last(self):
+        """Return whether the payload is marked as the final chunk."""
         return self._last
 
     @property
     def args(self):
+        """Return the encoded integer values stored in this instance."""
         return self._args
 
     @property
     def as_bytes(self):
+        """Return the serialized bytes for the current chunk."""
         if self._bytes is None:
             return self._args_to_bytes()
         return self._bytes
 
-    def __init__(self, sizes=None, *, fragment=None, last=None):
+    def __init__(self, values=None, *, fragment=None, last=None):
+        """Initialize a new encoder instance.
+
+        :param values: Optional initial integer values to register.
+        :type values: int or iterable of int
+        :param fragment: Whether the chunk is fragmented.
+        :type fragment: bool or None
+        :param last: Whether the chunk is the last one.
+        :type last: bool or None
+        """
         self._group_width = self.GROUP_WIDTH
         self._args = []
         self._fragment = None
         self._last = None
         self._units = []
         self._bytes = None
-        if sizes:
-            self.add(sizes, fragment=fragment, last=last)
+        if values:
+            self.add(values, fragment=fragment, last=last)
 
-    def add(self, sizes, *, fragment=None, last=None):
+    def add(self, values, *, fragment=None, last=None):
+        """Add one or more integer values to the chunk.
+
+        :param values: One integer value or an iterable of integer values.
+        :type values: int or iterable of int
+        :param fragment: Mark the chunk as fragmented when provided.
+        :type fragment: bool or None
+        :param last: Mark the chunk as final when provided.
+        :type last: bool or None
+        :raises RuntimeError: If the chunk was already finalized or fragmented.
+        """
         if self._fragment is not None:
             raise RuntimeError('Cannot add an argument after a fragmented one')
         if self._last is not None:
             raise RuntimeError('Cannot add an argument after a last one')
         try:
-            _iterator = iter(sizes)
+            _iterator = iter(values)
         except TypeError:
             # not iterable
-            sizes = [sizes]
+            values = [values]
         self._bytes = None
-        for size in sizes:
-            self._args.append(size)
+        for value in values:
+            self._args.append(value)
         if fragment is not None or last is not None:
             self.finalize(fragment=fragment,last=last)
 
     def finalize(self, *, fragment=None, last=None) -> bytes:
+        """Finalize the chunk and serialize it to bytes.
+
+        :param fragment: Set the fragmented flag on the payload.
+        :type fragment: bool or None
+        :param last: Set the final flag on the payload.
+        :type last: bool or None
+        :returns: The encoded byte representation.
+        :rtype: bytes
+        :raises RuntimeError: If the payload was already finalized.
+        """
         if self._last is not None:
             raise RuntimeError('Already finalized')
         if fragment is not None:
@@ -157,6 +198,15 @@ class Vaser:
 
     @classmethod
     def decode(cls, raw_bytes, **kwargs):
+        """Decode bytes back into a :class:`Vaser` instance.
+
+        :param raw_bytes: The encoded byte sequence to parse.
+        :type raw_bytes: bytes
+        :param kwargs: Keyword arguments forwarded to :meth:`__init__`.
+        :returns: A tuple containing the decoded instance and the number of
+            bytes consumed from the input.
+        :rtype: tuple[Vaser, int]
+        """
         logging.debug('----- decode START -----')
         out = cls(**kwargs)
         raw_bits = int.from_bytes(raw_bytes, byteorder='little')
@@ -177,6 +227,8 @@ class Vaser:
         flags = read_vlq()
         fragment = flags & 1
         last = flags & 2
+        if flags & ~3:
+            raise VaserInvalidFlagsError(f'Invalid flags: {flags}')
         logging.debug(f'fragment: {fragment}, last: {last}')
         for i in range(n_values):
             a = read_vlq()
@@ -190,6 +242,7 @@ class Vaser:
 
 
 def main():
+    """Run the package entry point for manual verification."""
     print('vaser main')
 
 
