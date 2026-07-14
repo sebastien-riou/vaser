@@ -76,24 +76,18 @@ def _parse_encode_values(values: Sequence[str]) -> list[tuple[list[int], bool, b
     """Parse CLI values into one or more chunks delimited by fragment/last markers."""
     chunks: list[tuple[list[int], bool, bool]] = []
     current_values: list[int] = []
-    current_fragment = False
-    current_last = False
 
-    def flush_chunk() -> None:
-        if current_values or current_fragment or current_last:
-            chunks.append((current_values[:], current_fragment, current_last))
+    def flush_chunk(*, fragment: bool = False, last: bool = False) -> None:
+        if current_values or fragment or last:
+            chunks.append((current_values[:], fragment, last))
 
     for value in values:
         if value == 'fragment':
-            flush_chunk()
+            flush_chunk(fragment=True, last=False)
             current_values = []
-            current_fragment = True
-            current_last = False
         elif value == 'last':
-            flush_chunk()
+            flush_chunk(fragment=False, last=True)
             current_values = []
-            current_fragment = False
-            current_last = True
         else:
             current_values.append(int(value))
 
@@ -130,23 +124,41 @@ def _run_encode(values: Sequence[str], *, fragment: bool, last: bool, output_pat
     return 0
 
 
+def _decode_all_chunks(payload: bytes) -> list[tuple[list[int], bool, bool]]:
+    """Decode a concatenated byte stream into all embedded chunks."""
+    chunks: list[tuple[list[int], bool, bool]] = []
+    remaining = payload
+    while remaining:
+        decoded, consumed = Vaser.decode(remaining)
+        chunks.append((decoded.args, decoded.fragment, decoded.last))
+        remaining = remaining[consumed:]
+    return chunks
+
+
 def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex: bool, hex_in: Optional[str]) -> int:
     """Decode bytes from stdin, a file, or a supplied hex string and emit values as text."""
     if hex_in is not None:
         payload = bytes.fromhex(hex_in)
     else:
         payload = _read_input_bytes(input_path, as_hex=as_hex)
-    decoded, _ = Vaser.decode(payload)
-    values_text = ' '.join(str(value) for value in decoded.args)
-    suffixes = []
-    if decoded.fragment:
-        suffixes.append('fragment')
-    if decoded.last:
-        suffixes.append('last')
-    text = values_text if not suffixes else f'{values_text} {" ".join(suffixes)}'
-    _write_output_text(text, output_path)
+    chunks = _decode_all_chunks(payload)
+    lines = []
+    for values, fragment, last in chunks:
+        values_text = ' '.join(str(value) for value in values)
+        suffixes = []
+        if fragment:
+            suffixes.append('fragment')
+        if last:
+            suffixes.append('last')
+        line = values_text if not suffixes else f'{values_text} {" ".join(suffixes)}'
+        lines.append(line)
+    text = '\n'.join(lines)
     if output_path is None:
-        sys.stdout.write('\n')
+        sys.stdout.write(text)
+        if lines:
+            sys.stdout.write('\n')
+    else:
+        _write_output_text(text, output_path)
     return 0
 
 

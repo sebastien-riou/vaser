@@ -106,3 +106,34 @@ def test_encode_splits_on_markers_inside_sequence():
     )
     assert result.returncode == 0, result.stderr.decode('utf-8', errors='replace')
     assert result.stdout != b''
+
+
+def test_decode_handles_multiple_chunks():
+    result = subprocess.run(
+        [
+            sys.executable,
+            '-m',
+            'vaser',
+            'encode',
+            '4',
+            'fragment',
+            '13',
+            'last',
+            '--hex',
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    decode_result = subprocess.run(
+        [sys.executable, '-m', 'vaser', 'decode', '--hex'],
+        cwd=REPO_ROOT,
+        input=result.stdout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert decode_result.returncode == 0, decode_result.stderr
+    assert decode_result.stdout.strip().splitlines() == ['4 fragment', '13 last']
