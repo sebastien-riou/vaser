@@ -254,24 +254,43 @@ def _build_parser() -> argparse.ArgumentParser:
     encode_parser.add_argument('values', nargs='+', type=int, help='Integer values to encode')
     encode_parser.add_argument('--fragment', action='store_true', help='Set the fragment flag')
     encode_parser.add_argument('--last', action='store_true', help='Set the last flag')
+    encode_parser.add_argument('--hex', action='store_true', help='Output or consume hexadecimal text instead of binary data')
     encode_parser.add_argument('--output', type=Path, help='Write encoded bytes to a binary file instead of stdout')
 
     decode_parser = subparsers.add_parser('decode', help='Decode bytes back to integer values')
     decode_parser.add_argument('--input', type=Path, help='Read encoded bytes from a binary file instead of stdin')
+    decode_parser.add_argument('--hex', action='store_true', help='Read hexadecimal text instead of binary data')
     decode_parser.add_argument('--output', type=Path, help='Write decoded values to a text file instead of stdout')
 
     return parser
 
 
-def _read_input_bytes(input_path: Optional[Path]) -> bytes:
-    """Read bytes from stdin or from a file path."""
+def _read_input_bytes(input_path: Optional[Path], *, as_hex: bool) -> bytes:
+    """Read bytes from stdin or from a file path, optionally as hexadecimal text."""
     if input_path is None:
-        return sys.stdin.buffer.read()
-    return input_path.read_bytes()
+        data = sys.stdin.buffer.read()
+    else:
+        data = input_path.read_bytes()
+
+    if not as_hex:
+        return data
+
+    text = data.decode('utf-8').strip()
+    if not text:
+        return b''
+    return bytes.fromhex(text)
 
 
-def _write_output_bytes(payload: bytes, output_path: Optional[Path]) -> None:
-    """Write bytes to stdout or a file path."""
+def _write_output_bytes(payload: bytes, output_path: Optional[Path], *, as_hex: bool) -> None:
+    """Write bytes to stdout or a file path, optionally as hexadecimal text."""
+    if as_hex:
+        text = payload.hex()
+        if output_path is None:
+            sys.stdout.write(text)
+        else:
+            output_path.write_text(text)
+        return
+
     if output_path is None:
         sys.stdout.buffer.write(payload)
         return
@@ -286,16 +305,18 @@ def _write_output_text(payload: str, output_path: Optional[Path]) -> None:
     output_path.write_text(payload)
 
 
-def _run_encode(values: Sequence[int], *, fragment: bool, last: bool, output_path: Optional[Path]) -> int:
-    """Encode provided values and emit them as bytes."""
+def _run_encode(values: Sequence[int], *, fragment: bool, last: bool, output_path: Optional[Path], as_hex: bool) -> int:
+    """Encode provided values and emit them as bytes or hexadecimal text."""
     chunk = Vaser(list(values), fragment=fragment if fragment else None, last=last if last else None)
-    _write_output_bytes(chunk.as_bytes, output_path)
+    _write_output_bytes(chunk.as_bytes, output_path, as_hex=as_hex)
+    if output_path is None and as_hex:
+        sys.stdout.write('\n')
     return 0
 
 
-def _run_decode(input_path: Optional[Path], output_path: Optional[Path]) -> int:
+def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex: bool) -> int:
     """Decode bytes from stdin or a file and emit values as text."""
-    payload = _read_input_bytes(input_path)
+    payload = _read_input_bytes(input_path, as_hex=as_hex)
     decoded, _ = Vaser.decode(payload)
     text = ' '.join(str(value) for value in decoded.args)
     _write_output_text(text, output_path)
@@ -310,9 +331,9 @@ def main(argv: Optional[Sequence[str]] = None):
     args = parser.parse_args(argv)
 
     if args.command == 'encode':
-        return _run_encode(args.values, fragment=args.fragment, last=args.last, output_path=args.output)
+        return _run_encode(args.values, fragment=args.fragment, last=args.last, output_path=args.output, as_hex=args.hex)
     if args.command == 'decode':
-        return _run_decode(args.input, args.output)
+        return _run_decode(args.input, args.output, as_hex=args.hex)
     parser.error('Unknown command')
     return 2
 

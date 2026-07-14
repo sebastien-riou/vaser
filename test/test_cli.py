@@ -50,3 +50,26 @@ def test_encode_decode_round_trip(tmp_path):
     assert decode_result.returncode == 0, decode_result.stderr
     assert output_path.exists()
     assert output_path.read_text().strip() == '4 13'
+
+
+def test_hex_encode_decode_round_trip():
+    encode_result = subprocess.run(
+        [sys.executable, '-m', 'vaser', 'encode', '4', '13', '--hex'],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert encode_result.returncode == 0, encode_result.stderr
+    assert encode_result.stdout.strip()
+
+    decode_result = subprocess.run(
+        [sys.executable, '-m', 'vaser', 'decode', '--hex'],
+        cwd=REPO_ROOT,
+        input=encode_result.stdout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert decode_result.returncode == 0, decode_result.stderr
+    assert decode_result.stdout.strip() == '4 13'
