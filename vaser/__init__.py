@@ -262,6 +262,7 @@ def _build_parser() -> argparse.ArgumentParser:
     decode_parser = subparsers.add_parser('decode', help='Decode bytes back to integer values')
     decode_parser.add_argument('--input', type=Path, help='Read encoded bytes from a binary file instead of stdin')
     decode_parser.add_argument('--hex', action='store_true', help='Read hexadecimal text instead of binary data')
+    decode_parser.add_argument('--hex-in', help='Decode a hexadecimal string provided directly as an argument')
     decode_parser.add_argument('--output', type=Path, help='Write decoded values to a text file instead of stdout')
 
     return parser
@@ -319,9 +320,12 @@ def _run_encode(values: Sequence[int], *, fragment: bool, last: bool, output_pat
     return 0
 
 
-def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex: bool) -> int:
-    """Decode bytes from stdin or a file and emit values as text."""
-    payload = _read_input_bytes(input_path, as_hex=as_hex)
+def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex: bool, hex_in: Optional[str]) -> int:
+    """Decode bytes from stdin, a file, or a supplied hex string and emit values as text."""
+    if hex_in is not None:
+        payload = bytes.fromhex(hex_in)
+    else:
+        payload = _read_input_bytes(input_path, as_hex=as_hex)
     decoded, _ = Vaser.decode(payload)
     values_text = ' '.join(str(value) for value in decoded.args)
     suffixes = []
@@ -344,7 +348,7 @@ def main(argv: Optional[Sequence[str]] = None):
     if args.command == 'encode':
         return _run_encode(args.values, fragment=args.fragment, last=args.last, output_path=args.output, as_hex=args.hex)
     if args.command == 'decode':
-        return _run_decode(args.input, args.output, as_hex=args.hex)
+        return _run_decode(args.input, args.output, as_hex=args.hex, hex_in=args.hex_in)
     parser.error('Unknown command')
     return 2
 

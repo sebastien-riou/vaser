@@ -72,3 +72,15 @@ def test_hex_encode_decode_round_trip():
     )
     assert decode_result.returncode == 0, decode_result.stderr
     assert decode_result.stdout.strip() == '4 13'
+
+
+def test_hex_in_argument():
+    result = subprocess.run(
+        [sys.executable, '-m', 'vaser', 'decode', '--hex-in', '848282848d'],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == '4 13 end'
