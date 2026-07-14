@@ -83,7 +83,7 @@ def test_hex_in_argument():
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == '4 13 end'
+    assert result.stdout.strip() == '4 13 last'
 
 
 def test_encode_accepts_trailing_flag_keywords():

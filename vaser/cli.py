@@ -121,7 +121,7 @@ def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex:
     if decoded.fragment:
         suffixes.append('fragment')
     if decoded.last:
-        suffixes.append('end')
+        suffixes.append('last')
     text = values_text if not suffixes else f'{values_text} {" ".join(suffixes)}'
     _write_output_text(text, output_path)
     if output_path is None:
