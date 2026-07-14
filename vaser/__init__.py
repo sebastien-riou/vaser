@@ -1,7 +1,6 @@
 import logging
 import io
 from typing import override
-from pysatl import Utils
 
 class VaserUnitOverflowError(RuntimeError):
     def __init__(self,msg,max_size):
@@ -93,7 +92,7 @@ class Vaser(object):
             out |= g << p 
             p += self._group_width + 1
         out |= 1 << (p-1) # mark the last group as such
-        logging.debug(f'value = {value}, width = {width}, n_groups = {n_groups}, out = {Utils.hexstr(out.to_bytes((p+7)//8,byteorder='little'))}')
+        logging.debug(f'value = {value}, width = {width}, n_groups = {n_groups}, out = {out.to_bytes((p+7)//8,byteorder='little')}')
         return out, p
     
     def _decode_size(self, dat):

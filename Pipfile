@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pysatl = "*"
+
 
 [dev-packages]
 build = "1.0.3"
@@ -12,6 +12,7 @@ twine = "*"
 black = "*"
 ruff = "*"
 pytest = "*"
+pysatl = "*"
 
 [requires]
 python_version = "3.12"
