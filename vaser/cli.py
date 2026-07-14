@@ -14,7 +14,7 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     encode_parser = subparsers.add_parser('encode', help='Encode integer values to bytes')
-    encode_parser.add_argument('values', nargs='+', help='Integer values to encode, or the trailing keywords fragment/last')
+    encode_parser.add_argument('values', nargs='+', help='Integer values to encode, or keywords next/fragment/last')
     encode_parser.add_argument('--fragment', action='store_true', help='Set the fragment flag')
     encode_parser.add_argument('--last', action='store_true', help='Set the last flag')
     encode_parser.add_argument('--hex', action='store_true', help='Output or consume hexadecimal text instead of binary data')
@@ -72,22 +72,29 @@ def _write_output_text(payload: str, output_path: Optional[Path]) -> None:
     output_path.write_text(payload)
 
 
-def _parse_encode_values(values: Sequence[str]) -> list[tuple[list[int], bool, bool]]:
-    """Parse CLI values into one or more chunks delimited by fragment/last markers."""
-    chunks: list[tuple[list[int], bool, bool]] = []
+def _parse_encode_values(values: Sequence[str]) -> list[tuple[list[int], bool, bool, bool]]:
+    """Parse CLI values into one or more chunks delimited by fragment/last/next markers."""
+    chunks: list[tuple[list[int], bool, bool, bool]] = []
     current_values: list[int] = []
+    current_flagged = False
 
-    def flush_chunk(*, fragment: bool = False, last: bool = False) -> None:
-        if current_values or fragment or last:
-            chunks.append((current_values[:], fragment, last))
+    def flush_chunk(*, fragment: bool = False, last: bool = False, explicit_next: bool = False) -> None:
+        if current_values or fragment or last or explicit_next:
+            chunks.append((current_values[:], fragment, last, explicit_next))
 
     for value in values:
         if value == 'fragment':
             flush_chunk(fragment=True, last=False)
             current_values = []
+            current_flagged = True
         elif value == 'last':
             flush_chunk(fragment=False, last=True)
             current_values = []
+            current_flagged = True
+        elif value == 'next':
+            flush_chunk(fragment=False, last=False, explicit_next=True)
+            current_values = []
+            current_flagged = True
         else:
             current_values.append(int(value))
 
@@ -99,12 +106,15 @@ def _run_encode(values: Sequence[str], *, fragment: bool, last: bool, output_pat
     """Encode provided values and emit them as bytes or hexadecimal text."""
     chunks = _parse_encode_values(values)
     if fragment:
-        chunks = [(values, True, False) for values, _, _ in chunks] if not chunks else [(values, True, False) for values, _, _ in chunks]
+        chunks = [(values, True, False, explicit_next) for values, _, _, explicit_next in chunks] if not chunks else [(values, True, False, explicit_next) for values, _, _, explicit_next in chunks]
     if last:
-        chunks = [(values, False, True) for values, _, _ in chunks] if not chunks else [(values, False, True) for values, _, _ in chunks]
+        chunks = [(values, False, True, explicit_next) for values, _, _, explicit_next in chunks] if not chunks else [(values, False, True, explicit_next) for values, _, _, explicit_next in chunks]
 
     payloads = []
-    for parsed_values, parsed_fragment, parsed_last in chunks:
+    if any(explicit_next for _, _, _, explicit_next in chunks):
+        payloads.append(Vaser([]).as_bytes)
+
+    for parsed_values, parsed_fragment, parsed_last, _ in chunks:
         chunk = Vaser(parsed_values, fragment=parsed_fragment if parsed_fragment else None, last=parsed_last if parsed_last else None)
         payloads.append(chunk.as_bytes)
 
@@ -143,14 +153,22 @@ def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex:
         payload = _read_input_bytes(input_path, as_hex=as_hex)
     chunks = _decode_all_chunks(payload)
     lines = []
+    emit_next = False
     for values, fragment, last in chunks:
+        if not values and not fragment and not last:
+            emit_next = True
+            continue
+
         values_text = ' '.join(str(value) for value in values)
-        suffixes = []
-        if fragment:
-            suffixes.append('fragment')
-        if last:
-            suffixes.append('last')
-        line = values_text if not suffixes else f'{values_text} {" ".join(suffixes)}'
+        if fragment or last:
+            suffixes = []
+            if fragment:
+                suffixes.append('fragment')
+            if last:
+                suffixes.append('last')
+            line = values_text if not suffixes else f'{values_text} {" ".join(suffixes)}'
+        else:
+            line = f'{values_text} next' if values_text else 'next'
         lines.append(line)
     text = '\n'.join(lines)
     if output_path is None:

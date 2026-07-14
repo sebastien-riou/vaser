@@ -71,7 +71,7 @@ def test_hex_encode_decode_round_trip():
         check=False,
     )
     assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip() == '4 13'
+    assert decode_result.stdout.strip() == '4 13 next'
 
 
 def test_hex_in_argument():
@@ -106,6 +106,28 @@ def test_encode_splits_on_markers_inside_sequence():
     )
     assert result.returncode == 0, result.stderr.decode('utf-8', errors='replace')
     assert result.stdout != b''
+
+
+def test_encode_splits_on_next_marker_and_decode_emits_next():
+    encode_result = subprocess.run(
+        [sys.executable, '-m', 'vaser', 'encode', '4', 'next', '13', '--hex'],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert encode_result.returncode == 0, encode_result.stderr
+
+    decode_result = subprocess.run(
+        [sys.executable, '-m', 'vaser', 'decode', '--hex'],
+        cwd=REPO_ROOT,
+        input=encode_result.stdout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert decode_result.returncode == 0, decode_result.stderr
+    assert decode_result.stdout.strip().splitlines() == ['4 next', '13 next']
 
 
 def test_decode_handles_multiple_chunks():
