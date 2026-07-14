@@ -268,14 +268,17 @@ def _build_parser() -> argparse.ArgumentParser:
 def _read_input_bytes(input_path: Optional[Path], *, as_hex: bool) -> bytes:
     """Read bytes from stdin or from a file path, optionally as hexadecimal text."""
     if input_path is None:
-        data = sys.stdin.buffer.read()
+        if as_hex:
+            data = sys.stdin.readline()
+        else:
+            data = sys.stdin.buffer.read()
     else:
         data = input_path.read_bytes()
 
     if not as_hex:
         return data
 
-    text = data.decode('utf-8').strip()
+    text = data.decode('utf-8').strip() if isinstance(data, (bytes, bytearray)) else str(data).strip()
     if not text:
         return b''
     return bytes.fromhex(text)
@@ -318,7 +321,13 @@ def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex:
     """Decode bytes from stdin or a file and emit values as text."""
     payload = _read_input_bytes(input_path, as_hex=as_hex)
     decoded, _ = Vaser.decode(payload)
-    text = ' '.join(str(value) for value in decoded.args)
+    values_text = ' '.join(str(value) for value in decoded.args)
+    suffixes = []
+    if decoded.fragment:
+        suffixes.append('fragment')
+    if decoded.last:
+        suffixes.append('end')
+    text = values_text if not suffixes else f'{values_text} {" ".join(suffixes)}'
     _write_output_text(text, output_path)
     if output_path is None:
         sys.stdout.write('\n')
