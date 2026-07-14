@@ -19,7 +19,6 @@ def test_encode_decode_round_trip(tmp_path):
             '4',
             '13',
             '--fragment',
-            '--last',
             '--output',
             str(encoded_path),
         ],
@@ -49,7 +48,7 @@ def test_encode_decode_round_trip(tmp_path):
     )
     assert decode_result.returncode == 0, decode_result.stderr
     assert output_path.exists()
-    assert output_path.read_text().strip() == '4 13 fragment end'
+    assert output_path.read_text().strip() == '4 13 fragment'
 
 
 def test_hex_encode_decode_round_trip():

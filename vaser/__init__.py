@@ -112,9 +112,11 @@ class Vaser:
         if self._fragment is None:
             self._fragment = False
         if last is not None:
-            self._last = last 
-        if self._last is None:    
-            self._last = True
+            self._last = last
+        if self._last is None:
+            self._last = False
+        if self._fragment and self._last:
+            raise VaserInvalidFlagsError('fragment and last cannot both be true')
         self._bytes = self._args_to_bytes()
         return self.as_bytes
 
@@ -229,8 +231,8 @@ class Vaser:
         logging.debug(f'consumed: {consumed}')
         n_values = read_vlq()
         flags = read_vlq()
-        fragment = flags & 1
-        last = flags & 2
+        fragment = bool(flags & 1)
+        last = bool(flags & 2)
         if flags & ~3:
             raise VaserInvalidFlagsError(f'Invalid flags: {flags}')
         logging.debug(f'fragment: {fragment}, last: {last}')
@@ -238,8 +240,8 @@ class Vaser:
             a = read_vlq()
             logging.debug(f'arg {i}: {a}')
             out.add(a)
-        if last or fragment:
-            out.finalize(fragment=fragment)
+        if fragment or last:
+            out.finalize(fragment=fragment, last=last)
 
         logging.debug('----- decode END -----')
         return out, consumed
