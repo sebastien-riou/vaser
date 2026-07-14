@@ -94,7 +94,7 @@ class Vaser:
             p += self._group_width + 1
         out |= 1 << (p - 1)  # mark the last group as such
         logging.debug(
-            f'value = {value}, width = {width}, n_groups = {n_groups}, out = {out.to_bytes((p+7)//8,byteorder='little')}'
+            f"value = {value}, width = {width}, n_groups = {n_groups}, out = {out.to_bytes((p+7)//8,byteorder='little')}"
         )
         return out, p
 
