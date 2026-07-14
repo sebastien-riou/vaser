@@ -33,7 +33,7 @@ class Vaser:
             return self._args_to_bytes()
         return self._bytes
 
-    def __init__(self, sizes=None):
+    def __init__(self, sizes=None, *, fragment=None, last=None):
         self._group_width = self.GROUP_WIDTH
         self._args = []
         self._fragment = None
@@ -41,9 +41,9 @@ class Vaser:
         self._units = []
         self._bytes = None
         if sizes:
-            self.add(sizes)
+            self.add(sizes, fragment=fragment, last=last)
 
-    def add(self, sizes, *, fragment=None):
+    def add(self, sizes, *, fragment=None, last=None):
         if self._fragment is not None:
             raise RuntimeError('Cannot add an argument after a fragmented one')
         if self._last is not None:
@@ -56,19 +56,20 @@ class Vaser:
         self._bytes = None
         for size in sizes:
             self._args.append(size)
-        if fragment is not None:
-            self._fragment = fragment
+        if fragment is not None or last is not None:
+            self.finalize(fragment=fragment,last=last)
 
-    def finalize(self, *, fragment=None) -> bytes:
-        if self._last:
+    def finalize(self, *, fragment=None, last=None) -> bytes:
+        if self._last is not None:
             raise RuntimeError('Already finalized')
-        if self._fragment is not None and fragment is not None:
-            raise RuntimeError('Fragment already set')
-        if self._fragment is None and fragment is not None:
+        if fragment is not None:
             self._fragment = fragment
         if self._fragment is None:
             self._fragment = False
-        self._last = not self._fragment
+        if last is not None:
+            self._last = last 
+        if self._last is None:    
+            self._last = True
         self._bytes = self._args_to_bytes()
         return self.as_bytes
 

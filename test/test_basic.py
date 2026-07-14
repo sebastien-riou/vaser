@@ -4,8 +4,7 @@ from vaser import Vaser
 
 def test_it():
     args = [4, 13]
-    s = Vaser(args)
-    s.finalize()
+    s = Vaser(args,last=True)
     check_test_case(args, s)
 
     MAX_VAL = (1 << 64) - 1  # not really a max of the implementation, more a max of what we test
@@ -13,12 +12,11 @@ def test_it():
     for i in range(1, MAX_VAL.bit_length()):
         first = 1 << i
         all_args = [first] + args
-        s = Vaser(all_args)
-        s.finalize()
+        s = Vaser(all_args,last=True)
+        #s.finalize()
         check_test_case(all_args, s)
     all_args = [MAX_VAL] + args
-    s = Vaser(all_args)
-    s.finalize()
+    s = Vaser(all_args,last=True)
     check_test_case(all_args, s)
 
 
