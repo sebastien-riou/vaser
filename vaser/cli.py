@@ -170,7 +170,7 @@ def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex:
         else:
             line = f'{values_text} next' if values_text else 'next'
         lines.append(line)
-    text = '\n'.join(lines)
+    text = ' '.join(lines)
     if output_path is None:
         sys.stdout.write(text)
         if lines:

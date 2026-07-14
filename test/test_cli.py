@@ -127,7 +127,7 @@ def test_encode_splits_on_next_marker_and_decode_emits_next():
         check=False,
     )
     assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip().splitlines() == ['4 next', '13 next']
+    assert decode_result.stdout.strip() == '4 next 13 next'
 
 
 def test_decode_handles_multiple_chunks():
@@ -158,4 +158,4 @@ def test_decode_handles_multiple_chunks():
         check=False,
     )
     assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip().splitlines() == ['4 fragment', '13 last']
+    assert decode_result.stdout.strip() == '4 fragment 13 last'
