@@ -4,7 +4,11 @@ This module provides a small encoder/decoder for sequences of integer values
 that can be serialized into bytes and reconstructed later.
 """
 
+import argparse
 import logging
+import sys
+from pathlib import Path
+from typing import Optional, Sequence
 
 
 class VaserInvalidFlagsError(RuntimeError):
@@ -241,10 +245,77 @@ class Vaser:
         return out, consumed
 
 
-def main():
-    """Run the package entry point for manual verification."""
-    print('vaser main')
+def _build_parser() -> argparse.ArgumentParser:
+    """Create the CLI argument parser for encode/decode commands."""
+    parser = argparse.ArgumentParser(prog='vaser', description='Encode and decode integer values with Vaser.')
+    subparsers = parser.add_subparsers(dest='command', required=True)
+
+    encode_parser = subparsers.add_parser('encode', help='Encode integer values to bytes')
+    encode_parser.add_argument('values', nargs='+', type=int, help='Integer values to encode')
+    encode_parser.add_argument('--fragment', action='store_true', help='Set the fragment flag')
+    encode_parser.add_argument('--last', action='store_true', help='Set the last flag')
+    encode_parser.add_argument('--output', type=Path, help='Write encoded bytes to a binary file instead of stdout')
+
+    decode_parser = subparsers.add_parser('decode', help='Decode bytes back to integer values')
+    decode_parser.add_argument('--input', type=Path, help='Read encoded bytes from a binary file instead of stdin')
+    decode_parser.add_argument('--output', type=Path, help='Write decoded values to a text file instead of stdout')
+
+    return parser
+
+
+def _read_input_bytes(input_path: Optional[Path]) -> bytes:
+    """Read bytes from stdin or from a file path."""
+    if input_path is None:
+        return sys.stdin.buffer.read()
+    return input_path.read_bytes()
+
+
+def _write_output_bytes(payload: bytes, output_path: Optional[Path]) -> None:
+    """Write bytes to stdout or a file path."""
+    if output_path is None:
+        sys.stdout.buffer.write(payload)
+        return
+    output_path.write_bytes(payload)
+
+
+def _write_output_text(payload: str, output_path: Optional[Path]) -> None:
+    """Write text to stdout or a file path."""
+    if output_path is None:
+        sys.stdout.write(payload)
+        return
+    output_path.write_text(payload)
+
+
+def _run_encode(values: Sequence[int], *, fragment: bool, last: bool, output_path: Optional[Path]) -> int:
+    """Encode provided values and emit them as bytes."""
+    chunk = Vaser(list(values), fragment=fragment if fragment else None, last=last if last else None)
+    _write_output_bytes(chunk.as_bytes, output_path)
+    return 0
+
+
+def _run_decode(input_path: Optional[Path], output_path: Optional[Path]) -> int:
+    """Decode bytes from stdin or a file and emit values as text."""
+    payload = _read_input_bytes(input_path)
+    decoded, _ = Vaser.decode(payload)
+    text = ' '.join(str(value) for value in decoded.args)
+    _write_output_text(text, output_path)
+    if output_path is None:
+        sys.stdout.write('\n')
+    return 0
+
+
+def main(argv: Optional[Sequence[str]] = None):
+    """Run the package entry point for the CLI."""
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == 'encode':
+        return _run_encode(args.values, fragment=args.fragment, last=args.last, output_path=args.output)
+    if args.command == 'decode':
+        return _run_decode(args.input, args.output)
+    parser.error('Unknown command')
+    return 2
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())
