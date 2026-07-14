@@ -160,6 +160,7 @@ class Vaser:
         out = cls(**kwargs)
         raw_bits = int.from_bytes(raw_bytes, byteorder='little')
         consumed_bits = 0
+
         def read_vlq() -> int:
             nonlocal raw_bits, consumed_bits
             v, p = out._decode_size(raw_bits)
@@ -182,7 +183,7 @@ class Vaser:
             out.add(a)
         if last or fragment:
             out.finalize(fragment=fragment)
-        
+
         logging.debug('----- decode END -----')
         return out, consumed
 
