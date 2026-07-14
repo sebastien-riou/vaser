@@ -14,7 +14,7 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     encode_parser = subparsers.add_parser('encode', help='Encode integer values to bytes')
-    encode_parser.add_argument('values', nargs='+', type=int, help='Integer values to encode')
+    encode_parser.add_argument('values', nargs='+', help='Integer values to encode, or the trailing keywords fragment/last')
     encode_parser.add_argument('--fragment', action='store_true', help='Set the fragment flag')
     encode_parser.add_argument('--last', action='store_true', help='Set the last flag')
     encode_parser.add_argument('--hex', action='store_true', help='Output or consume hexadecimal text instead of binary data')
@@ -72,9 +72,37 @@ def _write_output_text(payload: str, output_path: Optional[Path]) -> None:
     output_path.write_text(payload)
 
 
-def _run_encode(values: Sequence[int], *, fragment: bool, last: bool, output_path: Optional[Path], as_hex: bool) -> int:
+def _parse_encode_values(values: Sequence[str]) -> tuple[list[int], bool, bool]:
+    """Parse CLI values into integers and optional fragment/last flags."""
+    parsed_values: list[int] = []
+    fragment = False
+    last = False
+
+    if values and values[-1] in {'fragment', 'last'}:
+        flag = values[-1]
+        values = values[:-1]
+        if flag == 'fragment':
+            fragment = True
+        else:
+            last = True
+
+    for value in values:
+        if value == 'fragment':
+            fragment = True
+        elif value == 'last':
+            last = True
+        else:
+            parsed_values.append(int(value))
+
+    return parsed_values, fragment, last
+
+
+def _run_encode(values: Sequence[str], *, fragment: bool, last: bool, output_path: Optional[Path], as_hex: bool) -> int:
     """Encode provided values and emit them as bytes or hexadecimal text."""
-    chunk = Vaser(list(values), fragment=fragment if fragment else None, last=last if last else None)
+    parsed_values, parsed_fragment, parsed_last = _parse_encode_values(values)
+    fragment = fragment or parsed_fragment
+    last = last or parsed_last
+    chunk = Vaser(parsed_values, fragment=fragment if fragment else None, last=last if last else None)
     _write_output_bytes(chunk.as_bytes, output_path, as_hex=as_hex)
     if output_path is None and as_hex:
         sys.stdout.write('\n')
