@@ -11,7 +11,6 @@ from vaser import Vaser
 resource_path = Path(__file__).parent
 
 
-
 def parse_test_args():
     parser = argparse.ArgumentParser(description='test vectors generator')
     levels = ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
@@ -23,7 +22,8 @@ def parse_test_args():
     logging.basicConfig(level=args.log_level, format=logformat, datefmt=logdatefmt)
     return args.helper
 
-def check_test_case(args, chunk,*, fragment=False, last=True, **kwargs):
+
+def check_test_case(args, chunk, *, fragment=False, last=True, **kwargs):
     if chunk.args != args:
         logging.error(f'args:       {args}')
         logging.error(f'chunk.args: {chunk.args}')
@@ -34,12 +34,13 @@ def check_test_case(args, chunk,*, fragment=False, last=True, **kwargs):
         raise RuntimeError()
     if last != chunk.last:
         raise RuntimeError()
-    
+
     logging.info(f'bytes: {Utils.hexstr(chunk.bytes)}')
-    
+
     # check the serialized version can be decoded and match the original
     raw_bytes = chunk.bytes
-    decoded = Vaser.decode(raw_bytes, **kwargs)
+    decoded, consumed = Vaser.decode(raw_bytes, **kwargs)
+    logging.debug(f'consumed: {consumed} bytes ({consumed*8} bits)')
     logging.debug(f'decoded: {Utils.hexstr(decoded.bytes)}')
     logging.info(f'decoded: {decoded.args}')
     if decoded.args != args:
@@ -47,4 +48,6 @@ def check_test_case(args, chunk,*, fragment=False, last=True, **kwargs):
     if fragment != decoded.fragment:
         raise RuntimeError()
     if last != decoded.last:
+        raise RuntimeError()
+    if consumed != len(raw_bytes):
         raise RuntimeError()
