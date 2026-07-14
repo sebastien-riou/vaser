@@ -72,40 +72,61 @@ def _write_output_text(payload: str, output_path: Optional[Path]) -> None:
     output_path.write_text(payload)
 
 
-def _parse_encode_values(values: Sequence[str]) -> tuple[list[int], bool, bool]:
-    """Parse CLI values into integers and optional fragment/last flags."""
-    parsed_values: list[int] = []
-    fragment = False
-    last = False
+def _parse_encode_values(values: Sequence[str]) -> list[tuple[list[int], bool, bool]]:
+    """Parse CLI values into one or more chunks delimited by fragment/last markers."""
+    chunks: list[tuple[list[int], bool, bool]] = []
+    current_values: list[int] = []
+    current_fragment = False
+    current_last = False
 
-    if values and values[-1] in {'fragment', 'last'}:
-        flag = values[-1]
-        values = values[:-1]
-        if flag == 'fragment':
-            fragment = True
-        else:
-            last = True
+    def flush_chunk() -> None:
+        if current_values or current_fragment or current_last:
+            chunks.append((current_values[:], current_fragment, current_last))
 
     for value in values:
         if value == 'fragment':
-            fragment = True
+            flush_chunk()
+            current_values = []
+            current_fragment = True
+            current_last = False
         elif value == 'last':
-            last = True
+            flush_chunk()
+            current_values = []
+            current_fragment = False
+            current_last = True
         else:
-            parsed_values.append(int(value))
+            current_values.append(int(value))
 
-    return parsed_values, fragment, last
+    flush_chunk()
+    return chunks
 
 
 def _run_encode(values: Sequence[str], *, fragment: bool, last: bool, output_path: Optional[Path], as_hex: bool) -> int:
     """Encode provided values and emit them as bytes or hexadecimal text."""
-    parsed_values, parsed_fragment, parsed_last = _parse_encode_values(values)
-    fragment = fragment or parsed_fragment
-    last = last or parsed_last
-    chunk = Vaser(parsed_values, fragment=fragment if fragment else None, last=last if last else None)
-    _write_output_bytes(chunk.as_bytes, output_path, as_hex=as_hex)
-    if output_path is None and as_hex:
-        sys.stdout.write('\n')
+    chunks = _parse_encode_values(values)
+    if fragment:
+        chunks = [(values, True, False) for values, _, _ in chunks] if not chunks else [(values, True, False) for values, _, _ in chunks]
+    if last:
+        chunks = [(values, False, True) for values, _, _ in chunks] if not chunks else [(values, False, True) for values, _, _ in chunks]
+
+    payloads = []
+    for parsed_values, parsed_fragment, parsed_last in chunks:
+        chunk = Vaser(parsed_values, fragment=parsed_fragment if parsed_fragment else None, last=parsed_last if parsed_last else None)
+        payloads.append(chunk.as_bytes)
+
+    if output_path is None:
+        if as_hex:
+            sys.stdout.write(''.join(payload.hex() for payload in payloads))
+            sys.stdout.write('\n')
+        else:
+            for payload in payloads:
+                sys.stdout.buffer.write(payload)
+    else:
+        output_bytes = b''.join(payloads)
+        if as_hex:
+            output_path.write_text(output_bytes.hex())
+        else:
+            output_path.write_bytes(output_bytes)
     return 0
 
 

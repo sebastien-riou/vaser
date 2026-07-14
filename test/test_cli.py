@@ -95,3 +95,14 @@ def test_encode_accepts_trailing_flag_keywords():
     )
     assert result.returncode == 0, result.stderr.decode('utf-8', errors='replace')
     assert result.stdout != b''
+
+
+def test_encode_splits_on_markers_inside_sequence():
+    result = subprocess.run(
+        [sys.executable, '-m', 'vaser', 'encode', '4', 'fragment', '13', 'last'],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr.decode('utf-8', errors='replace')
+    assert result.stdout != b''
