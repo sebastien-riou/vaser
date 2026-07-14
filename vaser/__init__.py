@@ -51,9 +51,9 @@ class Vaser:
         :param values: Optional initial integer values to register.
         :type values: int or iterable of int
         :param fragment: Whether the chunk is fragmented.
-        :type fragment: bool or None
+        :type fragment: bool or None. If not None, it triggers finalization.
         :param last: Whether the chunk is the last one.
-        :type last: bool or None
+        :type last: bool or None. If not None, it triggers finalization.
         """
         self._group_width = self.GROUP_WIDTH
         self._args = []
@@ -70,10 +70,10 @@ class Vaser:
         :param values: One integer value or an iterable of integer values.
         :type values: int or iterable of int
         :param fragment: Mark the chunk as fragmented when provided.
-        :type fragment: bool or None
+        :type fragment: bool or None. If not None, it triggers finalization.
         :param last: Mark the chunk as final when provided.
-        :type last: bool or None
-        :raises RuntimeError: If the chunk was already finalized or fragmented.
+        :type last: bool or None. If not None, it triggers finalization.
+        :raises RuntimeError: If the chunk was already finalized.
         """
         if self._fragment is not None:
             raise RuntimeError('Cannot add an argument after a fragmented one')
@@ -93,13 +93,13 @@ class Vaser:
     def finalize(self, *, fragment=None, last=None) -> bytes:
         """Finalize the chunk and serialize it to bytes.
 
-        :param fragment: Set the fragmented flag on the payload.
-        :type fragment: bool or None
-        :param last: Set the final flag on the payload.
-        :type last: bool or None
+        :param fragment: Set the fragmented flag on the chunk.
+        :type fragment: bool or None. If None, defaults to False.
+        :param last: Set the final flag on the chunk.
+        :type last: bool or None. If None, defaults to False.
         :returns: The encoded byte representation.
         :rtype: bytes
-        :raises RuntimeError: If the payload was already finalized.
+        :raises RuntimeError: If the chunk was already finalized.
         """
         if self._last is not None:
             raise RuntimeError('Already finalized')
