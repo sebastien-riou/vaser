@@ -28,7 +28,7 @@ class Vaser:
         return self._args
 
     @property
-    def bytes(self):
+    def as_bytes(self):
         if self._bytes is None:
             return self._args_to_bytes()
         return self._bytes
@@ -70,7 +70,7 @@ class Vaser:
             self._fragment = False
         self._last = not self._fragment
         self._bytes = self._args_to_bytes()
-        return self.bytes
+        return self.as_bytes
 
     def _n_groups(self, width: int) -> int:
         return max(1, (width + self._group_width - 1) // self._group_width)

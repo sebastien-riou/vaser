@@ -35,13 +35,13 @@ def check_test_case(args, chunk, *, fragment=False, last=True, **kwargs):
     if last != chunk.last:
         raise RuntimeError()
 
-    logging.info(f'bytes: {Utils.hexstr(chunk.bytes)}')
+    logging.info(f'bytes: {Utils.hexstr(chunk.as_bytes)}')
 
     # check the serialized version can be decoded and match the original
-    raw_bytes = chunk.bytes
+    raw_bytes = chunk.as_bytes
     decoded, consumed = Vaser.decode(raw_bytes, **kwargs)
     logging.debug(f'consumed: {consumed} bytes ({consumed*8} bits)')
-    logging.debug(f'decoded: {Utils.hexstr(decoded.bytes)}')
+    logging.debug(f'decoded: {Utils.hexstr(decoded.as_bytes)}')
     logging.info(f'decoded: {decoded.args}')
     if decoded.args != args:
         raise RuntimeError()
