@@ -286,32 +286,8 @@ class VaserBin(Vaser):
         :raises RuntimeError: If the chunk was already finalized.
         :raises TypeError: If values are not bytes-like.
         """
-        if self._fragment is not None:
-            raise RuntimeError('Cannot add an argument after a fragmented one')
-        if self._last is not None:
-            raise RuntimeError('Cannot add an argument after a last one')
-        self._bytes = None
-        for value in self._coerce_values(values):
-            self._args.append(value)
-        if fragment is not None or last is not None:
-            self.finalize(fragment=fragment, last=last)
+        super().add(self._coerce_values(values), fragment=fragment, last=last)
 
-    def finalize(self, *, fragment=None, last=None) -> bytes:
-        """Finalize the chunk and serialize it to bytes."""
-        if self._last is not None:
-            raise RuntimeError('Already finalized')
-        if fragment is not None:
-            self._fragment = fragment
-        if self._fragment is None:
-            self._fragment = False
-        if last is not None:
-            self._last = last
-        if self._last is None:
-            self._last = False
-        if self._fragment and self._last:
-            raise VaserInvalidFlagsError('fragment and last cannot both be true')
-        self._bytes = self._args_to_bytes()
-        return self.as_bytes
 
     def _args_to_bytes(self) -> bytes:
         sizes = [len(value) for value in self._args]
