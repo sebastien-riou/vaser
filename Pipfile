@@ -7,12 +7,17 @@ name = "pypi"
 
 
 [dev-packages]
-build = "1.0.3"
+build = "==1.0.3"
 twine = "*"
 black = "*"
 ruff = "*"
 pytest = "*"
 pysatl = "*"
+sphinx = "*"
+sphinx-rtd-theme = "*"
+
+[scripts]
+docs = "bash scripts/build_docs.sh"
 
 [requires]
 python_version = "3.12"
