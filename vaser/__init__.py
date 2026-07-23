@@ -243,6 +243,106 @@ class Vaser:
         return out, consumed
 
 
+class VaserBin(Vaser):
+    """Encode and decode sequences of byte values using a size-prefixed format.
+
+    The serialized stream starts with a :class:`Vaser` encoding of the list of
+    individual value sizes. The payload that follows contains the original byte
+    values appended one after another.
+    """
+
+    @staticmethod
+    def _coerce_value(value) -> bytes:
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            return bytes(value)
+        raise TypeError('VaserBin values must be bytes or an iterable of bytes')
+
+    @classmethod
+    def _coerce_values(cls, values):
+        if values is None:
+            return []
+        if isinstance(values, (bytes, bytearray, memoryview)):
+            return [cls._coerce_value(values)]
+        try:
+            iterator = iter(values)
+        except TypeError as exc:
+            raise TypeError('VaserBin values must be bytes or an iterable of bytes') from exc
+        return [cls._coerce_value(value) for value in iterator]
+
+    def __init__(self, values=None, *, fragment=None, last=None):
+        super().__init__(values=None, fragment=None, last=None)
+        if values is not None:
+            self.add(values, fragment=fragment, last=last)
+
+    def add(self, values, *, fragment=None, last=None):
+        """Add one or more byte values to the chunk.
+
+        :param values: A single :class:`bytes` value or an iterable of bytes.
+        :type values: bytes or iterable of bytes
+        :param fragment: Mark the chunk as fragmented when provided.
+        :type fragment: bool or None
+        :param last: Mark the chunk as final when provided.
+        :type last: bool or None
+        :raises RuntimeError: If the chunk was already finalized.
+        :raises TypeError: If values are not bytes-like.
+        """
+        if self._fragment is not None:
+            raise RuntimeError('Cannot add an argument after a fragmented one')
+        if self._last is not None:
+            raise RuntimeError('Cannot add an argument after a last one')
+        self._bytes = None
+        for value in self._coerce_values(values):
+            self._args.append(value)
+        if fragment is not None or last is not None:
+            self.finalize(fragment=fragment, last=last)
+
+    def finalize(self, *, fragment=None, last=None) -> bytes:
+        """Finalize the chunk and serialize it to bytes."""
+        if self._last is not None:
+            raise RuntimeError('Already finalized')
+        if fragment is not None:
+            self._fragment = fragment
+        if self._fragment is None:
+            self._fragment = False
+        if last is not None:
+            self._last = last
+        if self._last is None:
+            self._last = False
+        if self._fragment and self._last:
+            raise VaserInvalidFlagsError('fragment and last cannot both be true')
+        self._bytes = self._args_to_bytes()
+        return self.as_bytes
+
+    def _args_to_bytes(self) -> bytes:
+        sizes = [len(value) for value in self._args]
+        sizes_payload = Vaser(sizes, fragment=self._fragment, last=self._last).as_bytes
+        return sizes_payload + b''.join(self._args)
+
+    @classmethod
+    def decode(cls, raw_bytes, **kwargs):
+        """Decode bytes back into a :class:`VaserBin` instance."""
+        out = cls(**kwargs)
+        sizes_chunk, sizes_consumed = Vaser.decode(raw_bytes)
+        out._fragment = sizes_chunk.fragment
+        out._last = sizes_chunk.last
+        sizes = sizes_chunk.args
+        remaining = raw_bytes[sizes_consumed:]
+        consumed = sizes_consumed
+        values = []
+        offset = 0
+        for size in sizes:
+            if offset + size > len(remaining):
+                raise RuntimeError('Truncated value payload')
+            values.append(remaining[offset:offset + size])
+            offset += size
+        if offset != len(remaining):
+            raise RuntimeError('Unexpected trailing data')
+        out._args = values
+        consumed += offset
+        out._bytes = out._args_to_bytes()
+        return out, consumed
+
+
 from vaser.cli import main
 
 
