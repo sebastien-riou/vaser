@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Sequence
 
-from vaser import Vaser
+from vaser import Vaser, VaserBin
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -17,11 +17,13 @@ def _build_parser() -> argparse.ArgumentParser:
     encode_parser.add_argument('values', nargs='+', help='Integer values to encode, or keywords next/fragment/last')
     encode_parser.add_argument('--fragment', action='store_true', help='Set the fragment flag')
     encode_parser.add_argument('--last', action='store_true', help='Set the last flag')
+    encode_parser.add_argument('--codec', default='Vaser', choices=('Vaser', 'VaserBin'), help='Select the codec implementation to use')
     encode_parser.add_argument('--hex', action='store_true', help='Output or consume hexadecimal text instead of binary data')
     encode_parser.add_argument('--output', type=Path, help='Write encoded bytes to a binary file instead of stdout')
 
     decode_parser = subparsers.add_parser('decode', help='Decode bytes back to integer values')
     decode_parser.add_argument('--input', type=Path, help='Read encoded bytes from a binary file instead of stdin')
+    decode_parser.add_argument('--codec', default='Vaser', choices=('Vaser', 'VaserBin'), help='Select the codec implementation to use')
     decode_parser.add_argument('--hex', action='store_true', help='Read hexadecimal text instead of binary data')
     decode_parser.add_argument('--hex-in', help='Decode a hexadecimal string provided directly as an argument')
     decode_parser.add_argument('--output', type=Path, help='Write decoded values to a text file instead of stdout')
@@ -72,7 +74,7 @@ def _write_output_text(payload: str, output_path: Optional[Path]) -> None:
     output_path.write_text(payload)
 
 
-def _parse_encode_values(values: Sequence[str]) -> list[tuple[list[int], bool, bool, bool]]:
+def _parse_encode_values(values: Sequence[str], codec_name: str) -> list[tuple[list[int], bool, bool, bool]]:
     """Parse CLI values into one or more chunks delimited by fragment/last/next markers."""
     chunks: list[tuple[list[int], bool, bool, bool]] = []
     current_values: list[int] = []
@@ -95,6 +97,11 @@ def _parse_encode_values(values: Sequence[str]) -> list[tuple[list[int], bool, b
             flush_chunk(fragment=False, last=False, explicit_next=True)
             current_values = []
             current_flagged = True
+        elif codec_name == 'VaserBin':
+            v = int(value)
+            size = (v.bit_length() + 7) // 8 or 1
+            as_bytes = v.to_bytes(size, byteorder='little')
+            current_values.append(as_bytes)
         else:
             current_values.append(int(value))
 
@@ -102,9 +109,17 @@ def _parse_encode_values(values: Sequence[str]) -> list[tuple[list[int], bool, b
     return chunks
 
 
-def _run_encode(values: Sequence[str], *, fragment: bool, last: bool, output_path: Optional[Path], as_hex: bool) -> int:
+def _resolve_codec(codec_name: str):
+    """Return the codec class for the requested serializer name."""
+    if codec_name == 'VaserBin':
+        return VaserBin
+    return Vaser
+
+
+def _run_encode(values: Sequence[str], *, fragment: bool, last: bool, output_path: Optional[Path], as_hex: bool, codec_name: str) -> int:
     """Encode provided values and emit them as bytes or hexadecimal text."""
-    chunks = _parse_encode_values(values)
+    codec = _resolve_codec(codec_name)
+    chunks = _parse_encode_values(values, codec_name)
     if fragment:
         chunks = [(values, True, False, explicit_next) for values, _, _, explicit_next in chunks] if not chunks else [(values, True, False, explicit_next) for values, _, _, explicit_next in chunks]
     if last:
@@ -112,10 +127,10 @@ def _run_encode(values: Sequence[str], *, fragment: bool, last: bool, output_pat
 
     payloads = []
     if any(explicit_next for _, _, _, explicit_next in chunks):
-        payloads.append(Vaser([]).as_bytes)
+        payloads.append(codec([]).as_bytes)
 
     for parsed_values, parsed_fragment, parsed_last, _ in chunks:
-        chunk = Vaser(parsed_values, fragment=parsed_fragment if parsed_fragment else None, last=parsed_last if parsed_last else None)
+        chunk = codec(parsed_values, fragment=parsed_fragment if parsed_fragment else None, last=parsed_last if parsed_last else None)
         payloads.append(chunk.as_bytes)
 
     if output_path is None:
@@ -134,24 +149,32 @@ def _run_encode(values: Sequence[str], *, fragment: bool, last: bool, output_pat
     return 0
 
 
-def _decode_all_chunks(payload: bytes) -> list[tuple[list[int], bool, bool]]:
+def _decode_all_chunks(payload: bytes, codec_name: str) -> list[tuple[list[int], bool, bool]]:
     """Decode a concatenated byte stream into all embedded chunks."""
+    codec = _resolve_codec(codec_name)
     chunks: list[tuple[list[int], bool, bool]] = []
     remaining = payload
     while remaining:
-        decoded, consumed = Vaser.decode(remaining)
+        decoded, consumed = codec.decode(remaining)
         chunks.append((decoded.args, decoded.fragment, decoded.last))
         remaining = remaining[consumed:]
     return chunks
 
 
-def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex: bool, hex_in: Optional[str]) -> int:
+def _format_decoded_value(value, codec_name: str) -> str:
+    """Render a decoded CLI value in a human-readable form."""
+    if codec_name == 'VaserBin' and isinstance(value, (bytes, bytearray, memoryview)):
+        return int.from_bytes(value, byteorder='little').__str__()
+    return str(value)
+
+
+def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex: bool, hex_in: Optional[str], codec_name: str) -> int:
     """Decode bytes from stdin, a file, or a supplied hex string and emit values as text."""
     if hex_in is not None:
         payload = bytes.fromhex(hex_in)
     else:
         payload = _read_input_bytes(input_path, as_hex=as_hex)
-    chunks = _decode_all_chunks(payload)
+    chunks = _decode_all_chunks(payload, codec_name)
     lines = []
     emit_next = False
     for values, fragment, last in chunks:
@@ -159,7 +182,7 @@ def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex:
             emit_next = True
             continue
 
-        values_text = ' '.join(str(value) for value in values)
+        values_text = ' '.join(_format_decoded_value(value, codec_name) for value in values)
         if fragment or last:
             suffixes = []
             if fragment:
@@ -186,8 +209,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == 'encode':
-        return _run_encode(args.values, fragment=args.fragment, last=args.last, output_path=args.output, as_hex=args.hex)
+        return _run_encode(args.values, fragment=args.fragment, last=args.last, output_path=args.output, as_hex=args.hex, codec_name=args.codec)
     if args.command == 'decode':
-        return _run_decode(args.input, args.output, as_hex=args.hex, hex_in=args.hex_in)
+        return _run_decode(args.input, args.output, as_hex=args.hex, hex_in=args.hex_in, codec_name=args.codec)
     parser.error('Unknown command')
     return 2

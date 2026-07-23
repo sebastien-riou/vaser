@@ -159,3 +159,25 @@ def test_decode_handles_multiple_chunks():
     )
     assert decode_result.returncode == 0, decode_result.stderr
     assert decode_result.stdout.strip() == '4 fragment 13 last'
+
+
+def test_codec_argument_selects_vaserbin_for_encode_and_decode():
+    encode_result = subprocess.run(
+        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'VaserBin', '--hex', '123', '456'],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert encode_result.returncode == 0, encode_result.stderr
+
+    decode_result = subprocess.run(
+        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'VaserBin', '--hex'],
+        cwd=REPO_ROOT,
+        input=encode_result.stdout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert decode_result.returncode == 0, decode_result.stderr
+    assert decode_result.stdout.strip() == '123 456 next'
