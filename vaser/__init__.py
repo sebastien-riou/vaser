@@ -122,7 +122,7 @@ class Vaser:
     def _group_mask(self) -> int:
         return (1 << self._group_width) - 1
 
-    def _encode_size(self, value: int):
+    def _encode_value(self, value: int):
         p = 0
         out = 0
         # encode size by group of x bits
@@ -142,7 +142,7 @@ class Vaser:
         )
         return out, p
 
-    def _decode_size(self, dat):
+    def _decode_value(self, dat):
         logging.debug(f'dat = 0x{dat:x}')
         p = 0
         size = 0
@@ -164,12 +164,35 @@ class Vaser:
         logging.debug(f'width = {p}, n_groups = {n_groups}')
         return size, n_groups * (self._group_width + 1)
 
+    def _encoded_value_width(self, value: int) -> int:
+        """Return the number of bits needed to encode a value with the VLQ scheme."""
+        width = value.bit_length()
+        n_groups = max(1, (width + self._group_width - 1) // self._group_width)
+        return n_groups * self.VLQ_UNIT
+
+    def size(self) -> int:
+        """Return the number of bytes that :attr:`as_bytes` would produce."""
+        p = 0
+        nap = self._encoded_value_width(len(self._args))
+        p += nap
+        flags = int(bool(self._fragment)) | (int(bool(self._last)) << 1)
+        fp = self._encoded_value_width(flags)
+        p += fp
+        for value in self._args:
+            p += self._encoded_value_width(value)
+        for i in [nap, fp, p]:
+            if 0 != i % self.VLQ_UNIT:
+                raise RuntimeError()
+        payload_size = (p + 7) // 8
+        psp = self._encoded_value_width(payload_size)
+        return ((psp + 7) // 8) + payload_size
+
     def _args_to_bytes(self, *, finalize_unit=False):
         logging.debug('----- args_to_bytes START -----')
         logging.debug(f'self._args: {self._args}')
         out = 0
         p = 0
-        nao, nap = self._encode_size(len(self._args))
+        nao, nap = self._encode_value(len(self._args))
         out = nao
         p = nap
         flags = 0
@@ -177,12 +200,12 @@ class Vaser:
             flags |= 1
         if self._last:
             flags |= 2
-        fo, fp = self._encode_size(flags)
+        fo, fp = self._encode_value(flags)
         out |= fo << p
         p += fp
         for i in range(len(self._args)):
             size = self._args[i]
-            so, sp = self._encode_size(size)
+            so, sp = self._encode_value(size)
             out |= so << p
             p += sp
             logging.debug(f'size = {size}, p = {p}')
@@ -192,7 +215,7 @@ class Vaser:
                 raise RuntimeError()
         payload_size = (p + 7) // 8
         logging.debug(f'payload_size = {payload_size}')
-        pso, psp = self._encode_size(payload_size)
+        pso, psp = self._encode_value(payload_size)
         out = (out << psp) | pso
         out_size = ((psp + 7) // 8) + payload_size
         logging.debug('----- args_to_bytes END -----')
@@ -216,7 +239,7 @@ class Vaser:
 
         def read_vlq() -> int:
             nonlocal raw_bits, consumed_bits
-            v, p = out._decode_size(raw_bits)
+            v, p = out._decode_value(raw_bits)
             raw_bits = raw_bits >> p
             consumed_bits += p
             return v
@@ -288,6 +311,11 @@ class VaserBin(Vaser):
         """
         super().add(self._coerce_values(values), fragment=fragment, last=last)
 
+
+    def size(self) -> int:
+        """Return the number of bytes that :attr:`as_bytes` would produce."""
+        sizes = [len(value) for value in self._args]
+        return Vaser(sizes, fragment=self._fragment, last=self._last).size() + sum(sizes)
 
     def _args_to_bytes(self) -> bytes:
         sizes = [len(value) for value in self._args]
