@@ -10,15 +10,15 @@ from vaser import Vaser, VaserBin
 
 def _build_parser() -> argparse.ArgumentParser:
     """Create the CLI argument parser for encode/decode commands."""
-    parser = argparse.ArgumentParser(prog='vaser', description='Encode and decode integer values with Vaser.')
+    parser = argparse.ArgumentParser(prog='vaser', description='Encode and decode values with Vaser.')
     subparsers = parser.add_subparsers(dest='command', required=True)
 
-    encode_parser = subparsers.add_parser('encode', help='Encode integer values to bytes')
-    encode_parser.add_argument('values', nargs='+', help='Integer values to encode, or keywords next/fragment/last')
+    encode_parser = subparsers.add_parser('encode', help='Encode hexadecimalvalues to bytes')
+    encode_parser.add_argument('values', nargs='+', help='Hexadecimal values to encode, or keywords next/fragment/last')
     encode_parser.add_argument('--fragment', action='store_true', help='Set the fragment flag')
     encode_parser.add_argument('--last', action='store_true', help='Set the last flag')
     encode_parser.add_argument('--codec', default='Vaser', choices=('Vaser', 'VaserBin'), help='Select the codec implementation to use')
-    encode_parser.add_argument('--hex', action='store_true', help='Output or consume hexadecimal text instead of binary data')
+    encode_parser.add_argument('--hex', action='store_true', help='Output hexadecimal text instead of binary data')
     encode_parser.add_argument('--output', type=Path, help='Write encoded bytes to a binary file instead of stdout')
 
     decode_parser = subparsers.add_parser('decode', help='Decode bytes back to integer values')
@@ -97,13 +97,9 @@ def _parse_encode_values(values: Sequence[str], codec_name: str) -> list[tuple[l
             flush_chunk(fragment=False, last=False, explicit_next=True)
             current_values = []
             current_flagged = True
-        elif codec_name == 'VaserBin':
-            v = int(value)
-            size = (v.bit_length() + 7) // 8 or 1
-            as_bytes = v.to_bytes(size, byteorder='little')
-            current_values.append(as_bytes)
         else:
-            current_values.append(int(value))
+            v = bytearray.fromhex(value)
+            current_values.append(v)
 
     flush_chunk()
     return chunks
@@ -163,10 +159,10 @@ def _decode_all_chunks(payload: bytes, codec_name: str) -> list[tuple[list[int],
 
 def _format_decoded_value(value, codec_name: str) -> str:
     """Render a decoded CLI value in a human-readable form."""
-    if codec_name == 'VaserBin' and isinstance(value, (bytes, bytearray, memoryview)):
-        return int.from_bytes(value, byteorder='little').__str__()
-    return str(value)
-
+    #if codec_name == 'VaserBin' and isinstance(value, (bytes, bytearray, memoryview)):
+    #    return int.from_bytes(value, byteorder='little').__str__()
+    #return str(value)
+    return bytes(value).hex()
 
 def _run_decode(input_path: Optional[Path], output_path: Optional[Path], as_hex: bool, hex_in: Optional[str], codec_name: str) -> int:
     """Decode bytes from stdin, a file, or a supplied hex string and emit values as text."""

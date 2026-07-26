@@ -6,7 +6,6 @@ def test_it():
     args = [4, 13]
     s = Vaser(args,last=True)
     check_test_case(args, s)
-
     assert s.size() == len(s.as_bytes)
 
     MAX_VAL = (1 << 64) - 1  # not really a max of the implementation, more a max of what we test
@@ -17,9 +16,18 @@ def test_it():
         s = Vaser(all_args,last=True)
         #s.finalize()
         check_test_case(all_args, s)
+        assert s.size() == len(s.as_bytes)
+        
     all_args = [MAX_VAL] + args
     s = Vaser(all_args,last=True)
     check_test_case(all_args, s)
+    assert s.size() == len(s.as_bytes)
+    
+    args = [bytearray(b'\x00\xff'), bytearray(b'abc'), bytearray(b'1234567890')]
+    s = Vaser(args,last=True)
+    check_test_case(args, s)
+    assert s.size() == len(s.as_bytes)
+
 
 
 if __name__ == '__main__':

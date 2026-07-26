@@ -1,11 +1,35 @@
-"""Compact VLQ-style serialization helpers for integer values.
+"""Compact VLQ-style serialization helpers for values.
 
-This module provides a small encoder/decoder for sequences of integer values
+This module provides a small encoder/decoder for sequences of values
 that can be serialized into bytes and reconstructed later.
 """
 
 import logging
 
+
+def to_ints(values):
+    """Convert a sequence of values to a list of integers.
+
+    :param values: A single :class:`bytes` value or an iterable of bytes.
+    :type values: bytes or iterable of bytes
+    :returns: A list of integers corresponding to the input values.
+    :rtype: list[int]
+    """
+    if isinstance(values, (bytes, bytearray, memoryview)):
+        return [int.from_bytes(values, byteorder='little')]
+    try:
+        iterator = iter(values)
+    except TypeError as exc:
+        raise TypeError('Values must be bytes/int or an iterable of bytes/int') from exc
+    out = []
+    for value in iterator:
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            out.append(int.from_bytes(value, byteorder='little'))
+        elif isinstance(value, int):
+            out.append(value)
+        else:
+            raise TypeError('Values must be bytes/int or an iterable of bytes/int')
+    return out
 
 class VaserInvalidFlagsError(RuntimeError):
     """Raised when invalid fragment or finalization flags are encountered."""
@@ -14,14 +38,36 @@ class VaserInvalidFlagsError(RuntimeError):
 
 
 class Vaser:
-    """Encode and decode sequences of integer values into a compact byte format.
+    """Encode and decode sequences of values into a compact byte format.
 
-    The encoder stores a list of integer values and serializes them using a
+    The encoder stores a list of values and serializes them using a
     variable-length quantity (VLQ) scheme. It can also reconstruct a decoded
     instance from previously encoded bytes.
     """
     GROUP_WIDTH = 7  # work with full bytes (VLQ unit is GROUP_WIDTH + 1 for the 'stop' bit)
     VLQ_UNIT = GROUP_WIDTH + 1
+
+    @staticmethod
+    def _coerce_value(value) -> bytes | int:
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            return bytes(value)
+        if isinstance(value, int):
+            return value
+        raise TypeError('VaserBin values must be bytes/int or an iterable of bytes/int')
+
+    @classmethod
+    def _coerce_values(cls, values):
+        if values is None:
+            return []
+        if isinstance(values, (bytes, bytearray, memoryview)):
+            return [cls._coerce_value(values)]
+        if isinstance(values, int):
+            return [cls._coerce_value(values)]
+        try:
+            iterator = iter(values)
+        except TypeError as exc:
+            raise TypeError('VaserBin values must be bytes/int or an iterable of bytes/int') from exc
+        return [cls._coerce_value(value) for value in iterator]
 
     @property
     def fragment(self):
@@ -35,7 +81,7 @@ class Vaser:
 
     @property
     def args(self):
-        """Return the encoded integer values stored in this instance."""
+        """Return the encoded values stored in this instance."""
         return self._args
 
     @property
@@ -48,8 +94,8 @@ class Vaser:
     def __init__(self, values=None, *, fragment=None, last=None):
         """Initialize a new encoder instance.
 
-        :param values: Optional initial integer values to register.
-        :type values: int or iterable of int
+        :param values: A single :class:`bytes` value or an iterable of bytes.
+        :type values: bytes or iterable of bytes
         :param fragment: Whether the chunk is fragmented.
         :type fragment: bool or None. If not None, it triggers finalization.
         :param last: Whether the chunk is the last one.
@@ -65,10 +111,10 @@ class Vaser:
             self.add(values, fragment=fragment, last=last)
 
     def add(self, values, *, fragment=None, last=None):
-        """Add one or more integer values to the chunk.
+        """Add one or more values to the chunk.
 
-        :param values: One integer value or an iterable of integer values.
-        :type values: int or iterable of int
+        :param values: A single :class:`bytes` value or an iterable of bytes.
+        :type values: bytes or iterable of bytes
         :param fragment: Mark the chunk as fragmented when provided.
         :type fragment: bool or None. If not None, it triggers finalization.
         :param last: Mark the chunk as final when provided.
@@ -79,11 +125,7 @@ class Vaser:
             raise RuntimeError('Cannot add an argument after a fragmented one')
         if self._last is not None:
             raise RuntimeError('Cannot add an argument after a last one')
-        try:
-            _iterator = iter(values)
-        except TypeError:
-            # not iterable
-            values = [values]
+        values = self._coerce_values(values)
         self._bytes = None
         for value in values:
             self._args.append(value)
@@ -122,11 +164,15 @@ class Vaser:
     def _group_mask(self) -> int:
         return (1 << self._group_width) - 1
 
-    def _encode_value(self, value: int):
+    def _encode_value(self, value):
         p = 0
         out = 0
-        # encode size by group of x bits
-        width = value.bit_length()
+        # encode value by group of x bits
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            width = len(value) * 8
+            value = int.from_bytes(value, byteorder='little')
+        else:
+            width = value.bit_length()
         n_groups = self._n_groups(width)
         mask = self._group_mask()
         v = value
@@ -145,13 +191,13 @@ class Vaser:
     def _decode_value(self, dat):
         logging.debug(f'dat = 0x{dat:x}')
         p = 0
-        size = 0
+        val = 0
         mask = self._group_mask()
         group_cnt = 0
         while True:
             s = dat & mask
             dat = dat >> self._group_width
-            size |= s << p
+            val |= s << p
             p += self._group_width
             logging.debug(f'group {group_cnt }: s = 0x{s:x}, dat = 0x{dat:x}')
             group_cnt += 1
@@ -161,12 +207,18 @@ class Vaser:
             if 0 == dat:
                 raise RuntimeError()
         n_groups = group_cnt
-        logging.debug(f'width = {p}, n_groups = {n_groups}')
-        return size, n_groups * (self._group_width + 1)
+        nbytes_if_int = (val.bit_length() + 7) // 8
+        nbytes_if_bytes = p // 8
+        val = val.to_bytes(max(nbytes_if_int, nbytes_if_bytes), byteorder='little')
+        logging.debug(f'decoded value = {val}, p = {p}, n_groups = {n_groups}')
+        return val, n_groups * (self._group_width + 1)
 
-    def _encoded_value_width(self, value: int) -> int:
+    def _encoded_value_width(self, value) -> int:
         """Return the number of bits needed to encode a value with the VLQ scheme."""
-        width = value.bit_length()
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            width = len(value) * 8
+        else:
+            width = value.bit_length()
         n_groups = max(1, (width + self._group_width - 1) // self._group_width)
         return n_groups * self.VLQ_UNIT
 
@@ -204,11 +256,11 @@ class Vaser:
         out |= fo << p
         p += fp
         for i in range(len(self._args)):
-            size = self._args[i]
-            so, sp = self._encode_value(size)
+            value = self._args[i]
+            so, sp = self._encode_value(value)
             out |= so << p
             p += sp
-            logging.debug(f'size = {size}, p = {p}')
+            logging.debug(f'value = {value}, p = {p}')
         logging.debug(f'nap = {nap}, fp = {fp}, p = {p}')
         for i in [nap, fp, p]:
             if 0 != i % self.VLQ_UNIT:
@@ -244,12 +296,16 @@ class Vaser:
             consumed_bits += p
             return v
 
-        payload_size = read_vlq()
+        def read_vlq_int() -> int:
+            vbytes = read_vlq()
+            return int.from_bytes(vbytes, byteorder='little')
+
+        payload_size = read_vlq_int()
         logging.debug(f'consumed_bits: {consumed_bits}, payload_size: {payload_size}')
         consumed = ((consumed_bits + 7) // 8) + payload_size
         logging.debug(f'consumed: {consumed}')
-        n_values = read_vlq()
-        flags = read_vlq()
+        n_values = read_vlq_int()
+        flags = read_vlq_int()
         fragment = bool(flags & 1)
         last = bool(flags & 2)
         if flags & ~3:
@@ -329,7 +385,7 @@ class VaserBin(Vaser):
         sizes_chunk, sizes_consumed = Vaser.decode(raw_bytes)
         out._fragment = sizes_chunk.fragment
         out._last = sizes_chunk.last
-        sizes = sizes_chunk.args
+        sizes = [int.from_bytes(x, byteorder='little') for x in sizes_chunk.args]
         remaining = raw_bytes[sizes_consumed:]
         consumed = sizes_consumed
         values = []

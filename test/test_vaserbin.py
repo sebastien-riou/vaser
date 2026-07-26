@@ -1,4 +1,5 @@
-from vaser import Vaser, VaserBin
+from test.common import parse_test_args
+from vaser import Vaser, VaserBin, to_ints
 
 
 def test_vaserbin_serializes_sizes_before_payload():
@@ -7,7 +8,9 @@ def test_vaserbin_serializes_sizes_before_payload():
     encoded = chunk.as_bytes
     assert chunk.size() == len(chunk.as_bytes)
     sizes_chunk, sizes_consumed = Vaser.decode(encoded)
-    assert sizes_chunk.args == [len(payloads[0]), len(payloads[1]), len(payloads[2])]
+    expected = [len(payloads[0]), len(payloads[1]), len(payloads[2])]
+    sizes = to_ints(sizes_chunk.args)
+    assert sizes == expected, f"Expected {expected}, got {sizes}"
     assert encoded[sizes_consumed:] == b''.join(payloads)
 
 
@@ -31,3 +34,9 @@ def test_vaserbin_round_trip_multiple_arguments():
     decoded, consumed = VaserBin.decode(encoded)
     assert decoded.args == payloads
     assert consumed == len(encoded)
+
+if __name__ == '__main__':
+    parse_test_args()
+    test_vaserbin_serializes_sizes_before_payload()
+    test_vaserbin_decode_returns_payload_as_bytes()
+    test_vaserbin_round_trip_multiple_arguments()

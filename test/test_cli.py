@@ -2,6 +2,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from test.common import parse_test_args
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -16,7 +18,7 @@ def test_encode_decode_round_trip(tmp_path):
             '-m',
             'vaser',
             'encode',
-            '4',
+            '04',
             '13',
             '--fragment',
             '--output',
@@ -48,12 +50,12 @@ def test_encode_decode_round_trip(tmp_path):
     )
     assert decode_result.returncode == 0, decode_result.stderr
     assert output_path.exists()
-    assert output_path.read_text().strip() == '4 13 fragment'
+    assert output_path.read_text().strip() == '04 13 fragment'
 
 
 def test_hex_encode_decode_round_trip():
     encode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '4', '13', '--hex'],
+        [sys.executable, '-m', 'vaser', 'encode', '04', '13', '--hex'],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -71,24 +73,24 @@ def test_hex_encode_decode_round_trip():
         check=False,
     )
     assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip() == '4 13 next'
+    assert decode_result.stdout.strip() == '04 13 next'
 
 
 def test_hex_in_argument():
     result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--hex-in', '848282848d'],
+        [sys.executable, '-m', 'vaser', 'decode', '--hex-in', '86828004801380'],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == '4 13 last'
+    assert result.stdout.strip() == '04 13 next'
 
 
 def test_encode_accepts_trailing_flag_keywords():
     result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '4', '13', 'fragment'],
+        [sys.executable, '-m', 'vaser', 'encode', '04', '13', 'fragment'],
         cwd=REPO_ROOT,
         capture_output=True,
         check=False,
@@ -99,7 +101,7 @@ def test_encode_accepts_trailing_flag_keywords():
 
 def test_encode_splits_on_markers_inside_sequence():
     result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '4', 'fragment', '13', 'last'],
+        [sys.executable, '-m', 'vaser', 'encode', '04', 'fragment', '13', 'last'],
         cwd=REPO_ROOT,
         capture_output=True,
         check=False,
@@ -110,7 +112,7 @@ def test_encode_splits_on_markers_inside_sequence():
 
 def test_encode_splits_on_next_marker_and_decode_emits_next():
     encode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '4', 'next', '13', '--hex'],
+        [sys.executable, '-m', 'vaser', 'encode', '04', 'next', '13', '--hex'],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -127,7 +129,7 @@ def test_encode_splits_on_next_marker_and_decode_emits_next():
         check=False,
     )
     assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip() == '4 next 13 next'
+    assert decode_result.stdout.strip() == '04 next 13 next'
 
 
 def test_decode_handles_multiple_chunks():
@@ -137,7 +139,7 @@ def test_decode_handles_multiple_chunks():
             '-m',
             'vaser',
             'encode',
-            '4',
+            '04',
             'fragment',
             '13',
             'last',
@@ -158,12 +160,12 @@ def test_decode_handles_multiple_chunks():
         check=False,
     )
     assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip() == '4 fragment 13 last'
+    assert decode_result.stdout.strip() == '04 fragment 13 last'
 
 
 def test_codec_argument_selects_vaserbin_for_encode_and_decode():
     encode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'VaserBin', '--hex', '123', '456'],
+        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'VaserBin', '--hex', '0123', '4567'],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -180,4 +182,16 @@ def test_codec_argument_selects_vaserbin_for_encode_and_decode():
         check=False,
     )
     assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip() == '123 456 next'
+    assert decode_result.stdout.strip() == '0123 4567 next'
+
+
+if __name__ == '__main__':
+    parse_test_args()
+    test_encode_decode_round_trip(tmp_path=Path('/tmp'))
+    test_hex_encode_decode_round_trip()
+    test_hex_in_argument()
+    test_encode_accepts_trailing_flag_keywords()
+    test_encode_splits_on_markers_inside_sequence()
+    test_encode_splits_on_next_marker_and_decode_emits_next()
+    test_decode_handles_multiple_chunks()
+    test_codec_argument_selects_vaserbin_for_encode_and_decode()
