@@ -23,6 +23,7 @@ def test_encode_decode_round_trip(tmp_path):
             '--fragment',
             '--output',
             str(encoded_path),
+            '--codec', 'Vaser'
         ],
         cwd=REPO_ROOT,
         capture_output=True,
@@ -42,6 +43,7 @@ def test_encode_decode_round_trip(tmp_path):
             str(encoded_path),
             '--output',
             str(output_path),
+            '--codec', 'Vaser'
         ],
         cwd=REPO_ROOT,
         capture_output=True,
@@ -55,7 +57,7 @@ def test_encode_decode_round_trip(tmp_path):
 
 def test_hex_encode_decode_round_trip():
     encode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '04', '13', '--hex'],
+        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'Vaser', '04', '13', '--hex'],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -65,7 +67,7 @@ def test_hex_encode_decode_round_trip():
     assert encode_result.stdout.strip()
 
     decode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--hex'],
+        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'Vaser', '--hex'],
         cwd=REPO_ROOT,
         input=encode_result.stdout,
         capture_output=True,
@@ -78,7 +80,7 @@ def test_hex_encode_decode_round_trip():
 
 def test_hex_in_argument():
     result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--hex-in', '86828004801380'],
+        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'Vaser', '--hex-in', '86828004801380'],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -90,7 +92,7 @@ def test_hex_in_argument():
 
 def test_encode_accepts_trailing_flag_keywords():
     result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '04', '13', 'fragment'],
+        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'Vaser', '04', '13', 'fragment'],
         cwd=REPO_ROOT,
         capture_output=True,
         check=False,
@@ -101,7 +103,7 @@ def test_encode_accepts_trailing_flag_keywords():
 
 def test_encode_splits_on_markers_inside_sequence():
     result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '04', 'fragment', '13', 'last'],
+        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'Vaser', '04', 'fragment', '13', 'last'],
         cwd=REPO_ROOT,
         capture_output=True,
         check=False,
@@ -112,7 +114,7 @@ def test_encode_splits_on_markers_inside_sequence():
 
 def test_encode_splits_on_next_marker_and_decode_emits_next():
     encode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '04', 'next', '13', '--hex'],
+        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'Vaser', '04', 'next', '13', '--hex'],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -121,7 +123,7 @@ def test_encode_splits_on_next_marker_and_decode_emits_next():
     assert encode_result.returncode == 0, encode_result.stderr
 
     decode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--hex'],
+        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'Vaser', '--hex'],
         cwd=REPO_ROOT,
         input=encode_result.stdout,
         capture_output=True,
@@ -144,6 +146,7 @@ def test_decode_handles_multiple_chunks():
             '13',
             'last',
             '--hex',
+            '--codec', 'Vaser'
         ],
         cwd=REPO_ROOT,
         capture_output=True,
@@ -152,7 +155,7 @@ def test_decode_handles_multiple_chunks():
     )
     assert result.returncode == 0, result.stderr
     decode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--hex'],
+        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'Vaser', '--hex'],
         cwd=REPO_ROOT,
         input=result.stdout,
         capture_output=True,
@@ -174,6 +177,7 @@ def test_decode_handles_multiple_chunks2():
             '13',
             'fragment',
             '--hex',
+            '--codec', 'Vaser'
         ],
         cwd=REPO_ROOT,
         capture_output=True,
@@ -191,6 +195,7 @@ def test_decode_handles_multiple_chunks2():
                 '14',
                 'last',
                 '--hex',
+                '--codec', 'Vaser'
             ],
             cwd=REPO_ROOT,
             capture_output=True,
@@ -200,7 +205,7 @@ def test_decode_handles_multiple_chunks2():
     assert result2.returncode == 0, result2.stderr
     full_input = (result1.stdout + result2.stdout).replace('\n', ' ').strip()   
     decode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--hex'],
+        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'Vaser', '--hex'],
         cwd=REPO_ROOT,
         input=full_input,
         capture_output=True,
