@@ -163,6 +163,54 @@ def test_decode_handles_multiple_chunks():
     assert decode_result.stdout.strip() == '04 fragment 13 last'
 
 
+def test_decode_handles_multiple_chunks2():
+    result1 = subprocess.run(
+        [
+            sys.executable,
+            '-m',
+            'vaser',
+            'encode',
+            '04',
+            '13',
+            'fragment',
+            '--hex',
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result1.returncode == 0, result1.stderr
+
+    result2 = subprocess.run(
+            [
+                sys.executable,
+                '-m',
+                'vaser',
+                'encode',
+                '14',
+                'last',
+                '--hex',
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    assert result2.returncode == 0, result2.stderr
+    full_input = (result1.stdout + result2.stdout).replace('\n', ' ').strip()   
+    decode_result = subprocess.run(
+        [sys.executable, '-m', 'vaser', 'decode', '--hex'],
+        cwd=REPO_ROOT,
+        input=full_input,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert decode_result.returncode == 0, decode_result.stderr
+    assert decode_result.stdout.strip() == '04 13 fragment 14 last'
+
+
 def test_codec_argument_selects_vaserbin_for_encode_and_decode():
     encode_result = subprocess.run(
         [sys.executable, '-m', 'vaser', 'encode', '--codec', 'VaserBin', '--hex', '0123', '4567'],
