@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include "vaser.h"
 void error_handler(uint32_t error_code){
     switch(error_code){
@@ -14,15 +15,32 @@ void error_handler(uint32_t error_code){
     }
 }
  
+#ifndef GRANULARITY
+#define GRANULARITY 4
+#endif
+
 char*to_decode;
-void reader(void* dst, sz_t size){
+void reader_core(void* dst, sz_t size){
     for(sz_t i = 0; i < size; i++){
         sscanf(to_decode,"%02hhx", &((uint8_t*)dst)[i]);
         to_decode += 2;
     }
 }
+void reader(void* dst, sz_t size){
+    if(size % GRANULARITY != 0){
+        printf("Error: size %zu is not a multiple of granularity %u\n", size, GRANULARITY);
+        fflush(stdout);
+        exit(1);
+    }
+    reader_core(dst, size);
+}
 
 void writer(const void* src, sz_t size){
+    if(size % GRANULARITY != 0){
+        printf("Error: size %zu is not a multiple of granularity %u\n", size, GRANULARITY);
+        fflush(stdout);
+        exit(1);
+    }
     for(sz_t i = 0; i < size; i++){
         printf("%02x", ((const uint8_t*)src)[i]);
     }
@@ -34,7 +52,7 @@ void writer(const void* src, sz_t size){
 
 int main(int argc, char** argv){
     vaser_ctx_t ctx;
-    ctx.granularity = 1;
+    ctx.granularity = GRANULARITY;
     ctx.error_handler = error_handler;
     if(argc < 2){
         printf("Usage: %s encode|decode\n", argv[0]);
@@ -72,10 +90,13 @@ int main(int argc, char** argv){
                 }
                 printf("Flags: %d\n", flags);
                 i++;
+            } else {
+                printf("implicit next\n");
+                flags = LAST_IN_CHUNK;
             }
             sz_t read_size = strlen(to_decode) / 2;
             uint8_t buffer[read_size];
-            reader(buffer, read_size);
+            reader_core(buffer, read_size);
             vaser_encode(&ctx, buffer, read_size, flags);
         }
     } else if(mode == DECODE){

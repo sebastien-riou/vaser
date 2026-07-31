@@ -157,6 +157,7 @@ static void vaser_write(vaser_ctx_t*ctx, const void* buffer, sz_t buffer_size){
             if(to_write > remaining) to_write = remaining;
             memcpy(dst8 + level, src, to_write);
             remaining -= to_write;
+            level += to_write;
             src += to_write;
             if(level == granularity){
                 ctx->writer(&ctx->buffer, granularity);
