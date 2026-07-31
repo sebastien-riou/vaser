@@ -1,0 +1,5 @@
+#!/bin/bash
+
+set -ex
+
+clang -g -O0 -std=gnu17 -I./libvaser/include ./test/main.c -o test-vaser 

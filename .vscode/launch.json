@@ -1,0 +1,32 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Vaser Encode",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/test-vaser",
+            "args": ["encode", "0001020304", "last"],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb"
+        },
+        {
+            "name": "Vaser Decode",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/test-vaser",
+            "args": ["decode", "170001020304"],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb"
+        }
+    ]
+}

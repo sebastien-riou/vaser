@@ -12,11 +12,22 @@ Features:
 The main use case is custom RPC protocols.
 
 Stream layout:
-- header:
+- packet header:
     - size of payload, in bytes, using VLQ encoding
 - payload:
-    - number of values in this chunk, using VLQ encoding
-    - flags, using VLQ encoding:
-        - fragment bit: 1 when last value is fragmented, i.e. this chunk contains only part of it
-        - last bit: 1 when last value is the last of the whole list
-    - values: encoded using VLQ
+    - payload header:
+        - number of values in this chunk, using VLQ encoding
+        - flags, using VLQ encoding:
+            - fragment bit: 1 when last value is fragmented, i.e. this chunk contains only part of it
+            - last bit: 1 when last value is the last of the whole list
+    - size of values: encoded using VLQ
+    - values
+
+Alternative stream layout to allow simultaneous encoding and sending:
+- use TLV format (Tag, Length, Value), with TL encoded as VLQ
+- Tags: (encoded on 2 bits, the 2 LSB of TL)
+    - 11 Last in List
+    - 10 Last in chunk
+    - 01 Fragment (last in chunk, but truncated)
+    - 00 Default
+- Stream layout is simply a collection of TLV ending with 'Last in List'
