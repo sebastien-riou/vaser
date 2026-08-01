@@ -217,7 +217,11 @@ static void vaser_encode(vaser_ctx_t*ctx, const void* buffer, sz_t buffer_size, 
     }
 }
 
-static void vaser_decode(vaser_ctx_t*ctx, void* dst, sz_t*dst_size, vaser_flags_t* flags){
+static bool vaser_is_empty(vaser_ctx_t*ctx){
+    return ctx->buf_level == 0;
+}
+
+static sz_t vaser_decode_header(vaser_ctx_t*ctx, vaser_flags_t* flags){
     sz_t tl;
     uint8_t tl_bytes[sizeof(sz_t)];
     sz_t tl_size = 0;
@@ -225,8 +229,8 @@ static void vaser_decode(vaser_ctx_t*ctx, void* dst, sz_t*dst_size, vaser_flags_
         vaser_read(ctx, tl_bytes + tl_size, 1);
         tl_size++;
     } while((tl_bytes[tl_size - 1] & 0x80) != 0);
-    //printf("vaser_decode: tl_size=%zu\n", tl_size);
-    //printf("vaser_decode: tl_bytes=");
+    //printf("vaser_decode_header: tl_size=%zu\n", tl_size);
+    //printf("vaser_decode_header: tl_bytes=");
     //for(sz_t i = 0; i < tl_size; i++){
         //printf("%02x", tl_bytes[i]);
     //}
@@ -234,17 +238,30 @@ static void vaser_decode(vaser_ctx_t*ctx, void* dst, sz_t*dst_size, vaser_flags_
     if(vlq_decode_sz(&tl, tl_bytes, &tl_size)){
         vaser_raise_error(ctx, VASER_ERROR_UNSUPPORTED_LENGTH);
     }
-    //printf("vaser_decode: tl_size=%zu\n", tl_size);
+    //printf("vaser_decode_header: tl_size=%zu\n", tl_size);
     
     *flags = (vaser_flags_t)(tl & 3);
     sz_t payload_size = tl >> 2;
+    return payload_size;
+}
+
+static void vaser_decode_payload(vaser_ctx_t*ctx, void* dst, sz_t payload_size, vaser_flags_t flags){
+    vaser_read(ctx, dst, payload_size);
+    if((flags != DEFAULT) && (ctx->buf_level > 0)){
+        //skip padding to granularity
+        ctx->buf_level = 0;
+    }
+}
+
+static void vaser_decode(vaser_ctx_t*ctx, void* dst, sz_t*dst_size, vaser_flags_t* flags){
+    sz_t payload_size = vaser_decode_header(ctx, flags);
     //printf("vaser_decode: payload_size=%zu\n", payload_size);
     //printf("vaser_decode: *dst_size=%zu\n", *dst_size);
     if(payload_size > *dst_size){
         //not enough space in dst
         vaser_raise_error(ctx, VASER_ERROR_BUFFER_TOO_SMALL);
     }
-    vaser_read(ctx, dst, payload_size);
+    vaser_decode_payload(ctx, dst, payload_size, *flags);
     *dst_size = payload_size;
 }
 

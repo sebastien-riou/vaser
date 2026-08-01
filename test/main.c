@@ -19,11 +19,32 @@ void error_handler(uint32_t error_code){
 #define GRANULARITY 4
 #endif
 
-char*to_decode;
+typedef struct{
+    const char*src;
+    sz_t remaining;
+} reader_ctx_t;
+
+reader_ctx_t g_reader_ctx;
+
+void set_reader_src(const char*src){
+    g_reader_ctx.src = src;
+    g_reader_ctx.remaining = strlen(src);
+}
+
+bool reader_src_is_empty(){
+    return g_reader_ctx.remaining == 0;
+}
+
 void reader_core(void* dst, sz_t size){
     for(sz_t i = 0; i < size; i++){
-        sscanf(to_decode,"%02hhx", &((uint8_t*)dst)[i]);
-        to_decode += 2;
+        if(g_reader_ctx.remaining < 2){
+            printf("ERROR (reader_core): not enough data to read %zu bytes\n", size);
+            fflush(stdout);
+            exit(1);
+        }
+        sscanf(g_reader_ctx.src,"%02hhx", &((uint8_t*)dst)[i]);
+        g_reader_ctx.src += 2;
+        g_reader_ctx.remaining -= 2;
     }
 }
 void reader(void* dst, sz_t size){
@@ -68,7 +89,6 @@ int main(int argc, char** argv){
         mode = ENCODE;
     } 
     if(strcmp(argv[1], "decode") == 0){
-        to_decode = argv[2];
         ctx.reader = reader;
         mode = DECODE;
     }
@@ -80,39 +100,63 @@ int main(int argc, char** argv){
     if(mode == ENCODE){
         for(unsigned int i = 2; i < argc; i++){
             //printf("Encode: %s\n", argv[i]);
-            to_decode = argv[i];
+            const char* arg = argv[i];
+            set_reader_src(arg);
             vaser_flags_t flags = DEFAULT;
             if(i + 1 < argc){
-                const char* arg = argv[i+1];
-                //printf("Next arg: '%s'\n", arg);
-                if(0 == strcmp(arg, "last")){
+                const char* next_arg = argv[i+1];
+                //printf("Next next_arg: '%s'\n", next_arg);
+                if(0 == strcmp(next_arg, "last")){
                     flags = LAST_IN_LIST;
-                } else if(0 == strcmp(arg, "next")){
+                } else if(0 == strcmp(next_arg, "next")){
                     flags = LAST_IN_CHUNK;
-                } else if(0 == strcmp(arg, "fragment")){
+                } else if(0 == strcmp(next_arg, "fragment")){
                     flags = FRAGMENT;
                 }
+                if(flags != DEFAULT){
+                    i++;
+                }
                 //printf("Flags: %d\n", flags);
-                i++;
             } else {
                 //printf("implicit next\n");
                 flags = LAST_IN_CHUNK;
             }
-            sz_t read_size = strlen(to_decode) / 2;
-            uint8_t buffer[read_size];
-            reader_core(buffer, read_size);
-            vaser_encode(&ctx, buffer, read_size, flags);
+            sz_t read_size;
+            if(0 == strcmp(arg, "null")){
+                vaser_encode(&ctx, 0, 0, flags);// 0 length value
+            } else {
+                read_size = strlen(arg) / 2;
+                uint8_t buffer[read_size];
+                reader_core(buffer, read_size);
+                vaser_encode(&ctx, buffer, read_size, flags);
+            }
         }
     } else if(mode == DECODE){
         vaser_flags_t flags;
         for(unsigned int i = 2; i < argc; i++){
             //printf("Decode: %s\n", argv[i]);
-            to_decode = argv[i];
-            sz_t read_size = strlen(to_decode) / 2;
+            const char* arg = argv[i];
+            set_reader_src(arg);
+            sz_t read_size = strlen(arg) / 2;
             uint8_t buffer[read_size];
-            vaser_decode(&ctx, buffer, &read_size, &flags);
-            writer_core(buffer, read_size);
-            //printf("Flags: %d\n", flags);
+            uint8_t*buf = buffer;
+            while(!reader_src_is_empty() || !vaser_is_empty(&ctx)){
+                vaser_decode(&ctx, buf, &read_size, &flags);
+                if (read_size == 0){
+                    printf("null");
+                } else {
+                    writer_core(buf, read_size);
+                }
+                //printf("Flags: %d\n", flags);
+                if(flags == LAST_IN_LIST){
+                    printf(" last");
+                } else if(flags == LAST_IN_CHUNK){
+                    printf(" next");
+                } else if(flags == FRAGMENT){
+                    printf(" fragment");
+                }
+                printf(" ");
+            }
         }
     }
     printf("\n");
