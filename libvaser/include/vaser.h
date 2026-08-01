@@ -143,7 +143,7 @@ static void vaser_init(vaser_ctx_t*ctx){
 }
 
 static void vaser_write(vaser_ctx_t*ctx, const void* buffer, sz_t buffer_size){
-    printf("vaser_write: buffer_size=%zu\n", buffer_size);
+    //printf("vaser_write: buffer_size=%zu\n", buffer_size);
     const unsigned int granularity = ctx->granularity;
     uint8_t* dst8 = (uint8_t*)&ctx->buffer;
     if(granularity == 1){
@@ -165,6 +165,35 @@ static void vaser_write(vaser_ctx_t*ctx, const void* buffer, sz_t buffer_size){
             }
         }
         ctx->buf_level = level;
+    }
+}
+
+static void vaser_read(vaser_ctx_t*ctx, void* dst, sz_t size){
+    //printf("vaser_read: size=%zu\n", size);
+    const unsigned int granularity = ctx->granularity;
+    uint8_t* buf8 = (uint8_t*)&ctx->buffer;
+    if(granularity == 1){
+        ctx->reader(dst, size);
+    } else {
+        sz_t level = ctx->buf_level;
+        sz_t remaining = size;
+        uint8_t* dst8 = (uint8_t*)dst;
+        while(remaining > 0){
+            if(level == 0){
+                ctx->reader(&ctx->buffer, granularity);
+                level = granularity;
+                buf8 = (uint8_t*)&ctx->buffer;
+            }
+            sz_t to_write = level;
+            if(to_write > remaining) to_write = remaining;
+            memcpy(dst8, buf8, to_write);
+            remaining -= to_write;
+            level -= to_write;
+            buf8 += to_write;
+            dst8 += to_write;
+        }
+        ctx->buf_level = level;
+        memcpy(&ctx->buffer, buf8, level);
     }
 }
 
@@ -193,29 +222,29 @@ static void vaser_decode(vaser_ctx_t*ctx, void* dst, sz_t*dst_size, vaser_flags_
     uint8_t tl_bytes[sizeof(sz_t)];
     sz_t tl_size = 0;
     do{
-        ctx->reader(tl_bytes + tl_size, 1);
+        vaser_read(ctx, tl_bytes + tl_size, 1);
         tl_size++;
     } while((tl_bytes[tl_size - 1] & 0x80) != 0);
-    printf("vaser_decode: tl_size=%zu\n", tl_size);
-    printf("vaser_decode: tl_bytes=");
-    for(sz_t i = 0; i < tl_size; i++){
-        printf("%02x", tl_bytes[i]);
-    }
-    printf("\n");
+    //printf("vaser_decode: tl_size=%zu\n", tl_size);
+    //printf("vaser_decode: tl_bytes=");
+    //for(sz_t i = 0; i < tl_size; i++){
+        //printf("%02x", tl_bytes[i]);
+    //}
+    //printf("\n");
     if(vlq_decode_sz(&tl, tl_bytes, &tl_size)){
         vaser_raise_error(ctx, VASER_ERROR_UNSUPPORTED_LENGTH);
     }
-    printf("vaser_decode: tl_size=%zu\n", tl_size);
+    //printf("vaser_decode: tl_size=%zu\n", tl_size);
     
     *flags = (vaser_flags_t)(tl & 3);
     sz_t payload_size = tl >> 2;
-    printf("vaser_decode: payload_size=%zu\n", payload_size);
-    printf("vaser_decode: *dst_size=%zu\n", *dst_size);
+    //printf("vaser_decode: payload_size=%zu\n", payload_size);
+    //printf("vaser_decode: *dst_size=%zu\n", *dst_size);
     if(payload_size > *dst_size){
         //not enough space in dst
         vaser_raise_error(ctx, VASER_ERROR_BUFFER_TOO_SMALL);
     }
-    ctx->reader(dst, payload_size);
+    vaser_read(ctx, dst, payload_size);
     *dst_size = payload_size;
 }
 

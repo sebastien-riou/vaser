@@ -28,23 +28,27 @@ void reader_core(void* dst, sz_t size){
 }
 void reader(void* dst, sz_t size){
     if(size % GRANULARITY != 0){
-        printf("Error: size %zu is not a multiple of granularity %u\n", size, GRANULARITY);
+        printf("ERROR (reader): size %zu is not a multiple of granularity %u\n", size, GRANULARITY);
         fflush(stdout);
         exit(1);
     }
     reader_core(dst, size);
 }
 
-void writer(const void* src, sz_t size){
-    if(size % GRANULARITY != 0){
-        printf("Error: size %zu is not a multiple of granularity %u\n", size, GRANULARITY);
-        fflush(stdout);
-        exit(1);
-    }
+void writer_core(const void* src, sz_t size){
     for(sz_t i = 0; i < size; i++){
         printf("%02x", ((const uint8_t*)src)[i]);
     }
-    printf("\n");
+    //printf("\n");
+}
+
+void writer(const void* src, sz_t size){
+    if(size % GRANULARITY != 0){
+        printf("ERROR (writer): size %zu is not a multiple of granularity %u\n", size, GRANULARITY);
+        fflush(stdout);
+        exit(1);
+    }
+    writer_core(src, size);
 }
 
 #define ENCODE 1
@@ -75,12 +79,12 @@ int main(int argc, char** argv){
     vaser_init(&ctx);
     if(mode == ENCODE){
         for(unsigned int i = 2; i < argc; i++){
-            printf("Encode: %s\n", argv[i]);
+            //printf("Encode: %s\n", argv[i]);
             to_decode = argv[i];
             vaser_flags_t flags = DEFAULT;
             if(i + 1 < argc){
                 const char* arg = argv[i+1];
-                printf("Next arg: '%s'\n", arg);
+                //printf("Next arg: '%s'\n", arg);
                 if(0 == strcmp(arg, "last")){
                     flags = LAST_IN_LIST;
                 } else if(0 == strcmp(arg, "next")){
@@ -88,10 +92,10 @@ int main(int argc, char** argv){
                 } else if(0 == strcmp(arg, "fragment")){
                     flags = FRAGMENT;
                 }
-                printf("Flags: %d\n", flags);
+                //printf("Flags: %d\n", flags);
                 i++;
             } else {
-                printf("implicit next\n");
+                //printf("implicit next\n");
                 flags = LAST_IN_CHUNK;
             }
             sz_t read_size = strlen(to_decode) / 2;
@@ -102,14 +106,15 @@ int main(int argc, char** argv){
     } else if(mode == DECODE){
         vaser_flags_t flags;
         for(unsigned int i = 2; i < argc; i++){
-            printf("Decode: %s\n", argv[i]);
+            //printf("Decode: %s\n", argv[i]);
             to_decode = argv[i];
             sz_t read_size = strlen(to_decode) / 2;
             uint8_t buffer[read_size];
             vaser_decode(&ctx, buffer, &read_size, &flags);
-            writer(buffer, read_size);
-            printf("Flags: %d\n", flags);
+            writer_core(buffer, read_size);
+            //printf("Flags: %d\n", flags);
         }
     }
+    printf("\n");
     return 0;
 }
