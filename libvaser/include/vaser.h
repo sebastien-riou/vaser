@@ -9,6 +9,15 @@ typedef uintptr_t sz_t;
 #define VASER_ERROR_UNSUPPORTED_LENGTH 3
 
 static unsigned int vlq_encode_bits(void* dst, sz_t* dst_size, const void* src, sz_t src_bit_length){
+    if(src_bit_length == 0){
+        if(*dst_size < 1){
+            //not enough space in dst
+            return 1;
+        }
+        *dst_size = 1;
+        ((uint8_t*)dst)[0] = 0;
+        return 0;
+    }
     sz_t consumed = 0;
     sz_t produced = 0;
     sz_t produced_bytes = 0;
@@ -108,18 +117,20 @@ static unsigned int vlq_decode_sz(sz_t*dst,const void* src, sz_t* src_size){
 }
 
 typedef void (*vaser_error_handler_t)(uint32_t error_code);
-typedef void (*vaser_reader_t)(void* dst, sz_t size);
-typedef void (*vaser_writer_t)(const void* src, sz_t size);
+typedef void (*vaser_reader_t)(void*io_ctx, void* dst, sz_t size);
+typedef void (*vaser_writer_t)(void*io_ctx, const void* src, sz_t size);
 
 typedef struct{
-    unsigned int granularity;
+    uint64_t buffer;
     vaser_error_handler_t error_handler;
     union{
         vaser_reader_t reader;
         vaser_writer_t writer;
+        void* io;
     };
-    uint64_t buffer;
+    void* io_ctx;
     unsigned int buf_level;
+    unsigned int granularity;
 } vaser_ctx_t;
 
 typedef enum {
@@ -138,8 +149,12 @@ static void vaser_raise_error(vaser_ctx_t*ctx, uint32_t error_code){
     }
 }
 
-static void vaser_init(vaser_ctx_t*ctx){
+static void vaser_init(vaser_ctx_t*ctx, void* io, void* io_ctx, unsigned int granularity, vaser_error_handler_t error_handler){
     ctx->buf_level = 0;
+    ctx->io = io;
+    ctx->io_ctx = io_ctx;
+    ctx->granularity = granularity;
+    ctx->error_handler = error_handler;
 }
 
 static void vaser_write(vaser_ctx_t*ctx, const void* buffer, sz_t buffer_size){
@@ -147,7 +162,7 @@ static void vaser_write(vaser_ctx_t*ctx, const void* buffer, sz_t buffer_size){
     const unsigned int granularity = ctx->granularity;
     uint8_t* dst8 = (uint8_t*)&ctx->buffer;
     if(granularity == 1){
-        ctx->writer(buffer, buffer_size);
+        ctx->writer(ctx->io_ctx, buffer, buffer_size);
     } else {
         sz_t level = ctx->buf_level;
         sz_t remaining = buffer_size;
@@ -160,7 +175,7 @@ static void vaser_write(vaser_ctx_t*ctx, const void* buffer, sz_t buffer_size){
             level += to_write;
             src += to_write;
             if(level == granularity){
-                ctx->writer(&ctx->buffer, granularity);
+                ctx->writer(ctx->io_ctx, &ctx->buffer, granularity);
                 level = 0;
             }
         }
@@ -173,14 +188,14 @@ static void vaser_read(vaser_ctx_t*ctx, void* dst, sz_t size){
     const unsigned int granularity = ctx->granularity;
     uint8_t* buf8 = (uint8_t*)&ctx->buffer;
     if(granularity == 1){
-        ctx->reader(dst, size);
+        ctx->reader(ctx->io_ctx, dst, size);
     } else {
         sz_t level = ctx->buf_level;
         sz_t remaining = size;
         uint8_t* dst8 = (uint8_t*)dst;
         while(remaining > 0){
             if(level == 0){
-                ctx->reader(&ctx->buffer, granularity);
+                ctx->reader(ctx->io_ctx, &ctx->buffer, granularity);
                 level = granularity;
                 buf8 = (uint8_t*)&ctx->buffer;
             }
@@ -212,7 +227,7 @@ static void vaser_encode(vaser_ctx_t*ctx, const void* buffer, sz_t buffer_size, 
     if((flags != DEFAULT) && (ctx->buf_level > 0)){
         //pad to granularity with zeros
         memset((uint8_t*)&ctx->buffer + ctx->buf_level, 0, ctx->granularity - ctx->buf_level);
-        ctx->writer(&ctx->buffer, ctx->granularity);
+        ctx->writer(ctx->io_ctx, &ctx->buffer, ctx->granularity);
         ctx->buf_level = 0;
     }
 }

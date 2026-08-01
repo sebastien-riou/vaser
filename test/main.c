@@ -5,18 +5,20 @@
 #include <stdlib.h>
 #include "vaser.h"
 void error_handler(uint32_t error_code){
+    printf("\n\n");
     switch(error_code){
         case VASER_ERROR_BUFFER_TOO_SMALL:
-            printf("Error: Buffer too small\n");
+            printf("ERROR: Buffer too small\n");
             break;
         default:
-            printf("Error: Unknown error code %u\n", error_code);
+            printf("ERROR: Unknown error code %u\n", error_code);
             break;
     }
+    exit(1);
 }
  
 #ifndef GRANULARITY
-#define GRANULARITY 4
+#define GRANULARITY 1
 #endif
 
 typedef struct{
@@ -24,52 +26,50 @@ typedef struct{
     sz_t remaining;
 } reader_ctx_t;
 
-reader_ctx_t g_reader_ctx;
-
-void set_reader_src(const char*src){
-    g_reader_ctx.src = src;
-    g_reader_ctx.remaining = strlen(src);
+void set_reader_src(reader_ctx_t*ctx, const char*src){
+    ctx->src = src;
+    ctx->remaining = strlen(src);
 }
 
-bool reader_src_is_empty(){
-    return g_reader_ctx.remaining == 0;
+bool reader_src_is_empty(reader_ctx_t*ctx){
+    return ctx->remaining == 0;
 }
 
-void reader_core(void* dst, sz_t size){
+void reader_core(reader_ctx_t*ctx, void* dst, sz_t size){
     for(sz_t i = 0; i < size; i++){
-        if(g_reader_ctx.remaining < 2){
+        if(ctx->remaining < 2){
             printf("ERROR (reader_core): not enough data to read %zu bytes\n", size);
             fflush(stdout);
             exit(1);
         }
-        sscanf(g_reader_ctx.src,"%02hhx", &((uint8_t*)dst)[i]);
-        g_reader_ctx.src += 2;
-        g_reader_ctx.remaining -= 2;
+        sscanf(ctx->src,"%02hhx", &((uint8_t*)dst)[i]);
+        ctx->src += 2;
+        ctx->remaining -= 2;
     }
 }
-void reader(void* dst, sz_t size){
+void reader(void* io_ctx, void* dst, sz_t size){
     if(size % GRANULARITY != 0){
         printf("ERROR (reader): size %zu is not a multiple of granularity %u\n", size, GRANULARITY);
         fflush(stdout);
         exit(1);
     }
-    reader_core(dst, size);
+    reader_core(io_ctx, dst, size);
 }
 
-void writer_core(const void* src, sz_t size){
+void writer_core(void* io_ctx, const void* src, sz_t size){
     for(sz_t i = 0; i < size; i++){
         printf("%02x", ((const uint8_t*)src)[i]);
     }
     //printf("\n");
 }
 
-void writer(const void* src, sz_t size){
+void writer(void* io_ctx, const void* src, sz_t size){
     if(size % GRANULARITY != 0){
         printf("ERROR (writer): size %zu is not a multiple of granularity %u\n", size, GRANULARITY);
         fflush(stdout);
         exit(1);
     }
-    writer_core(src, size);
+    writer_core(io_ctx, src, size);
 }
 
 #define ENCODE 1
@@ -77,31 +77,31 @@ void writer(const void* src, sz_t size){
 
 int main(int argc, char** argv){
     vaser_ctx_t ctx;
-    ctx.granularity = GRANULARITY;
     ctx.error_handler = error_handler;
+    reader_ctx_t g_reader_ctx;
     if(argc < 2){
         printf("Usage: %s encode|decode\n", argv[0]);
         return 1;
     }
     int mode = 0;
     if(strcmp(argv[1], "encode") == 0){
-        ctx.writer = writer;
+        vaser_init(&ctx, writer, 0, GRANULARITY, error_handler);
         mode = ENCODE;
     } 
     if(strcmp(argv[1], "decode") == 0){
-        ctx.reader = reader;
+        vaser_init(&ctx, reader, &g_reader_ctx, GRANULARITY, error_handler);
         mode = DECODE;
     }
     if(!mode){
         printf("Usage: %s encode|decode\n", argv[0]);
         return 1;
     }
-    vaser_init(&ctx);
+    
     if(mode == ENCODE){
         for(unsigned int i = 2; i < argc; i++){
             //printf("Encode: %s\n", argv[i]);
             const char* arg = argv[i];
-            set_reader_src(arg);
+            set_reader_src(&g_reader_ctx, arg);
             vaser_flags_t flags = DEFAULT;
             if(i + 1 < argc){
                 const char* next_arg = argv[i+1];
@@ -127,7 +127,7 @@ int main(int argc, char** argv){
             } else {
                 read_size = strlen(arg) / 2;
                 uint8_t buffer[read_size];
-                reader_core(buffer, read_size);
+                reader_core(&g_reader_ctx, buffer, read_size);
                 vaser_encode(&ctx, buffer, read_size, flags);
             }
         }
@@ -136,16 +136,15 @@ int main(int argc, char** argv){
         for(unsigned int i = 2; i < argc; i++){
             //printf("Decode: %s\n", argv[i]);
             const char* arg = argv[i];
-            set_reader_src(arg);
-            sz_t read_size = strlen(arg) / 2;
-            uint8_t buffer[read_size];
-            uint8_t*buf = buffer;
-            while(!reader_src_is_empty() || !vaser_is_empty(&ctx)){
-                vaser_decode(&ctx, buf, &read_size, &flags);
+            set_reader_src(&g_reader_ctx, arg);
+            while(!reader_src_is_empty(&g_reader_ctx) || !vaser_is_empty(&ctx)){
+                sz_t read_size = vaser_decode_header(&ctx, &flags);
                 if (read_size == 0){
                     printf("null");
                 } else {
-                    writer_core(buf, read_size);
+                    uint8_t buffer[read_size];
+                    vaser_decode_payload(&ctx, buffer, read_size,flags);
+                    writer_core(0, buffer, read_size);
                 }
                 //printf("Flags: %d\n", flags);
                 if(flags == LAST_IN_LIST){

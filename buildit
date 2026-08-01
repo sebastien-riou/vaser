@@ -2,4 +2,6 @@
 
 set -ex
 
-clang -g -O0 -std=gnu17 -I./libvaser/include ./test/main.c -o test-vaser 
+GRANULARITY=${1:-1}
+
+clang -g -O0 -std=gnu17 -DGRANULARITY=${GRANULARITY} -I./libvaser/include ./test/main.c -o test-vaser 
