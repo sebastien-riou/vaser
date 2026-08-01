@@ -1,250 +1,56 @@
 import subprocess
 import sys
-from pathlib import Path
 
 from test.common import parse_test_args
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_encode_decode_round_trip(tmp_path):
-    encoded_path = tmp_path / 'payload.bin'
-    output_path = tmp_path / 'decoded.txt'
-
-    encode_result = subprocess.run(
-        [
-            sys.executable,
-            '-m',
-            'vaser',
-            'encode',
-            '04',
-            '13',
-            '--fragment',
-            '--output',
-            str(encoded_path),
-            '--codec', 'Vaser'
-        ],
-        cwd=REPO_ROOT,
+def _run_cli(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, '-m', 'vaser', *args],
         capture_output=True,
         text=True,
         check=False,
     )
-    assert encode_result.returncode == 0, encode_result.stderr
-    assert encoded_path.exists()
-
-    decode_result = subprocess.run(
-        [
-            sys.executable,
-            '-m',
-            'vaser',
-            'decode',
-            '--input',
-            str(encoded_path),
-            '--output',
-            str(output_path),
-            '--codec', 'Vaser'
-        ],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert decode_result.returncode == 0, decode_result.stderr
-    assert output_path.exists()
-    assert output_path.read_text().strip() == '04 13 fragment'
 
 
-def test_hex_encode_decode_round_trip():
-    encode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'Vaser', '04', '13', '--hex'],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert encode_result.returncode == 0, encode_result.stderr
-    assert encode_result.stdout.strip()
+def test_encode_then_decode_same_as_c():
+    encode = _run_cli(['encode', '010203', 'fragment', '0a0b0c', 'last'])
+    assert encode.returncode == 0, encode.stderr
+    encoded_hex = encode.stdout.strip()
+    assert encoded_hex
 
-    decode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'Vaser', '--hex'],
-        cwd=REPO_ROOT,
-        input=encode_result.stdout,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip() == '04 13 next'
+    decode = _run_cli(['decode', encoded_hex])
+    assert decode.returncode == 0, decode.stderr
+    assert decode.stdout.strip() == '010203 fragment 0a0b0c last'
 
 
-def test_hex_in_argument():
-    result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'Vaser', '--hex-in', '86828004801380'],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == '04 13 next'
+def test_encode_then_decode_with_granularity():
+    encode = _run_cli(['encode', '--granularity', '4', '0102', 'last'])
+    assert encode.returncode == 0, encode.stderr
+    encoded_hex = encode.stdout.strip()
+    assert encoded_hex
+
+    decode = _run_cli(['decode', '--granularity', '4', encoded_hex])
+    assert decode.returncode == 0, decode.stderr
+    assert decode.stdout.strip() == '0102 last'
+
+def test_encode_then_decode_with_granularity_8():
+    encode = _run_cli(['encode', '--granularity', '8', '0001020304', 'null', '05'])
+    assert encode.returncode == 0, encode.stderr
+    encoded_hex = encode.stdout.strip()
+    assert encoded_hex
+
+    decode = _run_cli(['decode', '--granularity', '8', encoded_hex])
+    assert decode.returncode == 0, decode.stderr
+    assert decode.stdout.strip() == '0001020304 null 05'
 
 
-def test_encode_accepts_trailing_flag_keywords():
-    result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'Vaser', '04', '13', 'fragment'],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr.decode('utf-8', errors='replace')
-    assert result.stdout != b''
-
-
-def test_encode_splits_on_markers_inside_sequence():
-    result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'Vaser', '04', 'fragment', '13', 'last'],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr.decode('utf-8', errors='replace')
-    assert result.stdout != b''
-
-
-def test_encode_splits_on_next_marker_and_decode_emits_next():
-    encode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'Vaser', '04', 'next', '13', '--hex'],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert encode_result.returncode == 0, encode_result.stderr
-
-    decode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'Vaser', '--hex'],
-        cwd=REPO_ROOT,
-        input=encode_result.stdout,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip() == '04 next 13 next'
-
-
-def test_decode_handles_multiple_chunks():
-    result = subprocess.run(
-        [
-            sys.executable,
-            '-m',
-            'vaser',
-            'encode',
-            '04',
-            'fragment',
-            '13',
-            'last',
-            '--hex',
-            '--codec', 'Vaser'
-        ],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    decode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'Vaser', '--hex'],
-        cwd=REPO_ROOT,
-        input=result.stdout,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip() == '04 fragment 13 last'
-
-
-def test_decode_handles_multiple_chunks2():
-    result1 = subprocess.run(
-        [
-            sys.executable,
-            '-m',
-            'vaser',
-            'encode',
-            '04',
-            '13',
-            'fragment',
-            '--hex',
-            '--codec', 'Vaser'
-        ],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result1.returncode == 0, result1.stderr
-
-    result2 = subprocess.run(
-            [
-                sys.executable,
-                '-m',
-                'vaser',
-                'encode',
-                '14',
-                'last',
-                '--hex',
-                '--codec', 'Vaser'
-            ],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    assert result2.returncode == 0, result2.stderr
-    full_input = (result1.stdout + result2.stdout).replace('\n', ' ').strip()   
-    decode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'Vaser', '--hex'],
-        cwd=REPO_ROOT,
-        input=full_input,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip() == '04 13 fragment 14 last'
-
-
-def test_codec_argument_selects_vaserbin_for_encode_and_decode():
-    encode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'encode', '--codec', 'VaserBin', '--hex', '0123', '4567'],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert encode_result.returncode == 0, encode_result.stderr
-
-    decode_result = subprocess.run(
-        [sys.executable, '-m', 'vaser', 'decode', '--codec', 'VaserBin', '--hex'],
-        cwd=REPO_ROOT,
-        input=encode_result.stdout,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert decode_result.returncode == 0, decode_result.stderr
-    assert decode_result.stdout.strip() == '0123 4567 next'
+def test_it():
+    test_encode_then_decode_same_as_c()
+    test_encode_then_decode_with_granularity()
+    test_encode_then_decode_with_granularity_8()
 
 
 if __name__ == '__main__':
     parse_test_args()
-    test_encode_decode_round_trip(tmp_path=Path('/tmp'))
-    test_hex_encode_decode_round_trip()
-    test_hex_in_argument()
-    test_encode_accepts_trailing_flag_keywords()
-    test_encode_splits_on_markers_inside_sequence()
-    test_encode_splits_on_next_marker_and_decode_emits_next()
-    test_decode_handles_multiple_chunks()
-    test_codec_argument_selects_vaserbin_for_encode_and_decode()
+    test_it()

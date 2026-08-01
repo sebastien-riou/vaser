@@ -1,5 +1,5 @@
 # vaser
-Variable arguments serialization framework.
+Variable arguments serialization protocol.
 
 Sender may use python library or C library, receiver may use python library or C library. The C library is suitable for running baremetal on tiny MCUs.
 
