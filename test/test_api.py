@@ -4,7 +4,7 @@ from vaser import Vaser, VaserFlags
 
 def test_encode_decode_default_flags():
     payload = b'\x01\x02\x03'
-    chunk = Vaser(payload, flags=VaserFlags.LAST_IN_CHUNK)
+    chunk = Vaser(args=payload, flags=VaserFlags.LAST_IN_CHUNK)
     assert chunk.payload == payload
     assert chunk.fragment is False
     assert chunk.last_in_chunk is True
@@ -18,7 +18,7 @@ def test_encode_decode_default_flags():
 
 def test_encode_decode_fragment_flag():
     payload = b'\x99'
-    chunk = Vaser(payload, flags=VaserFlags.FRAGMENT)
+    chunk = Vaser(args=payload, flags=VaserFlags.FRAGMENT)
     assert chunk.fragment is True
     assert chunk.last_in_chunk is False
     assert chunk.last_in_list is False
@@ -31,7 +31,7 @@ def test_encode_decode_fragment_flag():
 
 def test_encode_decode_last_in_list_flag():
     payload = b'\x00\xFF'
-    chunk = Vaser(payload, flags=VaserFlags.LAST_IN_LIST)
+    chunk = Vaser(args=payload, flags=VaserFlags.LAST_IN_LIST)
     assert chunk.last_in_list is True
     assert chunk.fragment is False
 
@@ -44,7 +44,7 @@ def test_encode_decode_last_in_list_flag():
 def test_encode_decode_with_granularity_padding():
     for granularity in (1, 2, 4, 8):
         payload = b'\x01\x02\x03'
-        chunk = Vaser(payload, flags=VaserFlags.LAST_IN_CHUNK, granularity=granularity)
+        chunk = Vaser(args=payload, flags=VaserFlags.LAST_IN_CHUNK, granularity=granularity)
         encoded = chunk.as_bytes
         assert len(encoded) % granularity == 0, f'Encoded length {len(encoded)} is not a multiple of granularity {granularity}'
 
@@ -55,7 +55,7 @@ def test_encode_decode_with_granularity_padding():
 
 
 def test_add_appends_args_and_updates_flags():
-    chunk = Vaser(b'\x01\x02')
+    chunk = Vaser(args=b'\x01\x02')
     chunk.add([b'\x03', b'\x04'], flags=VaserFlags.LAST_IN_LIST)
 
     assert chunk.args == [b'\x01\x02', b'\x03', b'\x04']
@@ -67,10 +67,11 @@ def test_add_appends_args_and_updates_flags():
     assert decoded.flags == VaserFlags.LAST_IN_LIST
     assert consumed == len(encoded)
 
+
 def test_encode_decode_granularity_8():
     args = [b'\x00\x01\x02\x03\x04', b'', b'\x05']
     granularity = 8
-    chunk = Vaser(args, flags=VaserFlags.LAST_IN_CHUNK, granularity=granularity)
+    chunk = Vaser(args=args, flags=VaserFlags.LAST_IN_CHUNK, granularity=granularity)
     encoded = chunk.as_bytes
     assert len(encoded) % granularity == 0, f'Encoded length {len(encoded)} is not a multiple of granularity {granularity}'
     assert encoded == bytes.fromhex('14000102030400060500000000000000'), f'Encoded bytes {encoded.hex()} do not match expected'
@@ -85,6 +86,7 @@ def test_it():
     test_encode_decode_fragment_flag()
     test_encode_decode_last_in_list_flag()
     test_encode_decode_with_granularity_padding()
+    test_add_appends_args_and_updates_flags()
     test_encode_decode_granularity_8()
 
 

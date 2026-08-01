@@ -94,7 +94,9 @@ def _decode_values(data: bytes) -> list[bytes]:
 
 
 class Vaser:
-    def __init__(self, args: Union[bytes, bytearray, memoryview, Iterable[bytes]], *, flags: Union[VaserFlags, int] = VaserFlags.DEFAULT, granularity: int = 1):
+    def __init__(self, *, args: Union[bytes, bytearray, memoryview, Iterable[bytes]] = None, flags: Union[VaserFlags, int] = VaserFlags.DEFAULT, granularity: int = 1):
+        if args is None:
+            args = []
         self._args, self._payload = _normalize_payload(args)
         try:
             self.flags = VaserFlags(flags)
@@ -140,6 +142,8 @@ class Vaser:
     def as_bytes(self) -> bytes:
         if self.flags == VaserFlags.DEFAULT:
             raise RuntimeError('cannot encode a Vaser chunk with DEFAULT flags; use add() to append args and set flags')
+        if self._args == []:
+            raise RuntimeError('cannot encode a Vaser chunk with no args; use add() to append args')
         encoded: bytes = b''
         total_args = len(self._args)
         for index, arg in enumerate(self._args):
@@ -184,7 +188,7 @@ class Vaser:
                     raise ValueError('invalid padding')
                 consumed = padded_end
 
-        return cls(args, flags=flags, granularity=granularity), consumed
+        return cls(args=args, flags=flags, granularity=granularity), consumed
 
     def __repr__(self) -> str:
         return f'Vaser(flags={self.flags.name}, payload={self._payload!r}, granularity={self.granularity})'

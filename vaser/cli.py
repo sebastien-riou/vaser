@@ -28,7 +28,7 @@ def _positive_int(value: str) -> int:
 def _encode_args(args: Sequence[str], granularity: int) -> bytes:
     result = bytearray()
 
-    chunk = Vaser([], granularity=granularity)
+    chunk = Vaser(granularity=granularity)
     i = 0
     while i < len(args):
         arg = args[i]
@@ -49,7 +49,7 @@ def _encode_args(args: Sequence[str], granularity: int) -> bytes:
 
         if flags != VaserFlags.DEFAULT:
             result.extend(chunk.as_bytes)
-            chunk = Vaser([], granularity=granularity)
+            chunk = Vaser(granularity=granularity)
 
         i += 1
 
