@@ -2,6 +2,6 @@
 
 set -ex
 
-GRANULARITY=${1:-1}
+DEFAULT_GRANULARITY=${1:-1}
 
-clang -g -O0 -std=gnu17 -DGRANULARITY=${GRANULARITY} -I./libvaser/include ./test/main.c -o test-vaser 
+clang -g -O0 -std=gnu17 -DDEFAULT_GRANULARITY=${DEFAULT_GRANULARITY} -I./libvaser/include ./test/main.c -o test-vaser 

@@ -17,9 +17,11 @@ void error_handler(uint32_t error_code){
     exit(1);
 }
  
-#ifndef GRANULARITY
-#define GRANULARITY 1
+#ifndef DEFAULT_GRANULARITY
+#define DEFAULT_GRANULARITY 1
 #endif
+
+unsigned int g_granularity = DEFAULT_GRANULARITY;
 
 typedef struct{
     const char*src;
@@ -48,8 +50,8 @@ void reader_core(reader_ctx_t*ctx, void* dst, sz_t size){
     }
 }
 void reader(void* io_ctx, void* dst, sz_t size){
-    if(size % GRANULARITY != 0){
-        printf("ERROR (reader): size %zu is not a multiple of granularity %u\n", size, GRANULARITY);
+    if(size % g_granularity != 0){
+        printf("ERROR (reader): size %zu is not a multiple of granularity %u\n", size, g_granularity);
         fflush(stdout);
         exit(1);
     }
@@ -64,8 +66,8 @@ void writer_core(void* io_ctx, const void* src, sz_t size){
 }
 
 void writer(void* io_ctx, const void* src, sz_t size){
-    if(size % GRANULARITY != 0){
-        printf("ERROR (writer): size %zu is not a multiple of granularity %u\n", size, GRANULARITY);
+    if(size % g_granularity != 0){
+        printf("ERROR (writer): size %zu is not a multiple of granularity %u\n", size, g_granularity);
         fflush(stdout);
         exit(1);
     }
@@ -79,26 +81,42 @@ int main(int argc, char** argv){
     vaser_ctx_t ctx;
     ctx.error_handler = error_handler;
     reader_ctx_t g_reader_ctx;
-    if(argc < 2){
-        printf("Usage: %s encode|decode\n", argv[0]);
+    unsigned int granularity = DEFAULT_GRANULARITY;
+    int arg_index = 1;
+
+    if(argc >= 3 && strcmp(argv[1], "--granularity") == 0){
+        char* endptr = NULL;
+        unsigned long value = strtoul(argv[2], &endptr, 10);
+        if(*endptr != '\0' || value == 0){
+            fprintf(stderr, "Invalid granularity: %s\n", argv[2]);
+            return 1;
+        }
+        granularity = (unsigned int)value;
+        arg_index = 3;
+    }
+
+    if(arg_index >= argc){
+        printf("Usage: %s [--granularity N] encode|decode\n", argv[0]);
         return 1;
     }
+
+    g_granularity = granularity;
     int mode = 0;
-    if(strcmp(argv[1], "encode") == 0){
-        vaser_init(&ctx, writer, 0, GRANULARITY, error_handler);
+    if(strcmp(argv[arg_index], "encode") == 0){
+        vaser_init(&ctx, writer, 0, granularity, error_handler);
         mode = ENCODE;
     } 
-    if(strcmp(argv[1], "decode") == 0){
-        vaser_init(&ctx, reader, &g_reader_ctx, GRANULARITY, error_handler);
+    if(strcmp(argv[arg_index], "decode") == 0){
+        vaser_init(&ctx, reader, &g_reader_ctx, granularity, error_handler);
         mode = DECODE;
     }
     if(!mode){
-        printf("Usage: %s encode|decode\n", argv[0]);
+        printf("Usage: %s [--granularity N] encode|decode\n", argv[0]);
         return 1;
     }
     
     if(mode == ENCODE){
-        for(unsigned int i = 2; i < argc; i++){
+        for(unsigned int i = arg_index + 1; i < argc; i++){
             //printf("Encode: %s\n", argv[i]);
             const char* arg = argv[i];
             set_reader_src(&g_reader_ctx, arg);
@@ -133,7 +151,7 @@ int main(int argc, char** argv){
         }
     } else if(mode == DECODE){
         vaser_flags_t flags;
-        for(unsigned int i = 2; i < argc; i++){
+        for(unsigned int i = arg_index + 1; i < argc; i++){
             //printf("Decode: %s\n", argv[i]);
             const char* arg = argv[i];
             set_reader_src(&g_reader_ctx, arg);
