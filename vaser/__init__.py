@@ -105,6 +105,17 @@ class Vaser:
             raise ValueError('granularity must be >= 1')
         self.granularity = granularity
 
+    def add(self, args: Union[bytes, bytearray, memoryview, Iterable[bytes]], *, flags: Union[VaserFlags, int] = VaserFlags.DEFAULT) -> None:
+        if self.flags != VaserFlags.DEFAULT:
+            raise RuntimeError('cannot add to a Vaser chunk that already has non-DEFAULT flags')
+        new_args, new_payload = _normalize_payload(args)
+        self._args.extend(new_args)
+        self._payload += new_payload
+        try:
+            self.flags = VaserFlags(flags)
+        except ValueError as exc:
+            raise VaserInvalidFlagsError(flags) from exc
+
     @property
     def payload(self) -> bytes:
         return self._payload
@@ -127,6 +138,8 @@ class Vaser:
 
     @property
     def as_bytes(self) -> bytes:
+        if self.flags == VaserFlags.DEFAULT:
+            raise RuntimeError('cannot encode a Vaser chunk with DEFAULT flags; use add() to append args and set flags')
         encoded: bytes = b''
         total_args = len(self._args)
         for index, arg in enumerate(self._args):

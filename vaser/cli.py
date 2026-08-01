@@ -27,23 +27,8 @@ def _positive_int(value: str) -> int:
 
 def _encode_args(args: Sequence[str], granularity: int) -> bytes:
     result = bytearray()
-    buffer = bytearray()
 
-    def write_bytes(data: bytes) -> None:
-        if granularity == 1:
-            result.extend(data)
-            return
-
-        idx = 0
-        while idx < len(data):
-            space = granularity - len(buffer)
-            chunk = data[idx:idx + space]
-            buffer.extend(chunk)
-            idx += len(chunk)
-            if len(buffer) == granularity:
-                result.extend(buffer)
-                buffer.clear()
-
+    chunk = Vaser([], granularity=granularity)
     i = 0
     while i < len(args):
         arg = args[i]
@@ -60,14 +45,11 @@ def _encode_args(args: Sequence[str], granularity: int) -> bytes:
         else:
             flags = VaserFlags.LAST_IN_CHUNK
 
-        raw_chunk = Vaser(payload, flags=flags, granularity=1).as_bytes
-        write_bytes(raw_chunk)
+        chunk.add([payload], flags=flags)
 
-        if granularity > 1 and flags != VaserFlags.DEFAULT and buffer:
-            padding = granularity - len(buffer)
-            buffer.extend(b'\x00' * padding)
-            result.extend(buffer)
-            buffer.clear()
+        if flags != VaserFlags.DEFAULT:
+            result.extend(chunk.as_bytes)
+            chunk = Vaser([], granularity=granularity)
 
         i += 1
 
@@ -99,14 +81,13 @@ def _decode_args(args: Sequence[str], granularity: int) -> str:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='vaser', description='Encode or decode Vaser chunks.')
+    parser.add_argument('--granularity', type=_positive_int, default=1, help='Write/read granularity for padding when flags are not DEFAULT.')
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     encode_parser = subparsers.add_parser('encode', help='Encode Vaser chunks from hexadecimal payloads.')
-    encode_parser.add_argument('--granularity', type=_positive_int, default=1, help='Write granularity for padding when flags are not DEFAULT.')
     encode_parser.add_argument('values', nargs='+', help='Payload bytes in hex or markers null/next/fragment/last.')
 
     decode_parser = subparsers.add_parser('decode', help='Decode Vaser chunks from hexadecimal encoded chunks.')
-    decode_parser.add_argument('--granularity', type=_positive_int, default=1, help='Read granularity for padded payloads when flags are not DEFAULT.')
     decode_parser.add_argument('values', nargs='+', help='Chunk bytes in hex.')
 
     return parser

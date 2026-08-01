@@ -25,22 +25,23 @@ def test_encode_then_decode_same_as_c():
 
 
 def test_encode_then_decode_with_granularity():
-    encode = _run_cli(['encode', '--granularity', '4', '0102', 'last'])
+    encode = _run_cli(['--granularity', '4', 'encode', '0102', 'last'])
     assert encode.returncode == 0, encode.stderr
     encoded_hex = encode.stdout.strip()
     assert encoded_hex
 
-    decode = _run_cli(['decode', '--granularity', '4', encoded_hex])
+    decode = _run_cli(['--granularity', '4', 'decode', encoded_hex])
     assert decode.returncode == 0, decode.stderr
     assert decode.stdout.strip() == '0102 last'
 
+
 def test_encode_then_decode_with_granularity_8():
-    encode = _run_cli(['encode', '--granularity', '8', '0001020304', 'null', '05'])
+    encode = _run_cli(['--granularity', '8', 'encode', '0001020304', 'null', '05'])
     assert encode.returncode == 0, encode.stderr
     encoded_hex = encode.stdout.strip()
     assert encoded_hex
 
-    decode = _run_cli(['decode', '--granularity', '8', encoded_hex])
+    decode = _run_cli(['--granularity', '8', 'decode', encoded_hex])
     assert decode.returncode == 0, decode.stderr
     assert decode.stdout.strip() == '0001020304 null 05'
 
