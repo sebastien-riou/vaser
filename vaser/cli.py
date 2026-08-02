@@ -72,7 +72,7 @@ def _decode_args(args: Sequence[str], granularity: int) -> str:
                 output_parts.append('last')
             elif chunk.flags == VaserFlags.FRAGMENT:
                 output_parts.append('fragment')
-            elif chunk.flags == VaserFlags.LAST_IN_CHUNK and data[consumed:]:
+            elif chunk.flags == VaserFlags.LAST_IN_CHUNK:
                 output_parts.append('next')
 
             data = data[consumed:]

@@ -43,7 +43,7 @@ def test_encode_then_decode_with_granularity_8():
 
     decode = _run_cli(['--granularity', '8', 'decode', encoded_hex])
     assert decode.returncode == 0, decode.stderr
-    assert decode.stdout.strip() == '0001020304 null 05'
+    assert decode.stdout.strip() == '0001020304 null 05 next'
 
 
 def test_it():
