@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+# This script encodes a list of argument into a Vaser encoded stream and outputs it to a device.
+# This is mainly for testing stdin2device.py. The same functionality can be achieved by using the vaser.serialize module directly.
+# Example of use:
+# - In terminal 1: pipenv run python -m vaser.deserialize --pts --device my-tty
+# - In terminal 2: pipenv run ./serialize-stdin2device 010203 last
+
+set -euo pipefail
+
+python -m vaser.serialize "$@" | python -m vaser.stdin2device my-tty

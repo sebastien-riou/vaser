@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-
+pyserial = "*"
 
 [dev-packages]
 build = "==1.0.3"

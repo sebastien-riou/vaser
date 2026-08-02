@@ -29,6 +29,24 @@ Example:
 .. code-block:: console
 
    pipenv run python -m vaser --granularity 1 encode 010203 next 0405 last
+   0e0102030b0405
+
+.. doctest::
+   :hide:
+
+   >>> import subprocess, sys
+   >>> result = subprocess.run(
+   ...     [sys.executable, '-m', 'vaser', '--granularity', '1', 'encode', '010203', 'next', '0405', 'last'],
+   ...     stdout=subprocess.PIPE,
+   ...     stderr=subprocess.PIPE,
+   ...     text=True,
+   ... )
+   >>> result.returncode == 0
+   True
+   >>> result.stdout.strip() == '0e0102030b0405'
+   True
+   >>> result.stderr == ''
+   True
 
 Decoding
 --------
@@ -42,6 +60,24 @@ Example:
 .. code-block:: console
 
    pipenv run python -m vaser --granularity 1 decode 0e0102030b0405
+   010203 next 0405 last
+
+.. doctest::
+   :hide:
+
+   >>> import subprocess, sys
+   >>> result = subprocess.run(
+   ...     [sys.executable, '-m', 'vaser', '--granularity', '1', 'decode', '0e0102030b0405'],
+   ...     stdout=subprocess.PIPE,
+   ...     stderr=subprocess.PIPE,
+   ...     text=True,
+   ... )
+   >>> result.returncode == 0
+   True
+   >>> result.stdout.strip() == '010203 next 0405 last'
+   True
+   >>> result.stderr == ''
+   True
 
 Options
 -------

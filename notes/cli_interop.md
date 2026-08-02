@@ -6,7 +6,7 @@ It test the following:
 - That result is decoded correctly by both the C and the Python implementations
 
 Its input arguments are the same as the `encode` command of the Python CLI implementation (cli.py), but `encode` is implicit.
-In addition, it takes the following option arguments:
+In addition, it takes the following optional arguments:
 - `--c-impl`: path to the C implementation executable (default is `./test-vaser`)
 
 The tool is doing the following:
