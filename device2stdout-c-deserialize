@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# This script reads a Vaser encoded stream from a device and outputs the decoded stream to stdout as hexstr.
+# Example of use:
+# - In terminal 1: pipenv run ./device2stdout-c-deserialize --pts my-tty
+# - In terminal 2: pipenv run python -m vaser.serialize --device my-tty 010203 last
+
+set -euo pipefail
+
+./device2stdout "$@" | python -m vaser.deserialize
