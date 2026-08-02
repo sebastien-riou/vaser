@@ -17,6 +17,9 @@ This repo provides the following test programs:
 - `python -m vaser.cli`: test program for the Python implementation 
 - `python -m test.cli_interop`: program to test interoperability between the C and the python implementation
 
+## How to build the doc
+`./scripts/build_docs`
+
 ## How to test Python implementation
 `pipenv run pytest`
 
