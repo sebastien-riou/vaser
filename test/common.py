@@ -1,10 +1,6 @@
 import argparse
-import copy
 import logging
 from pathlib import Path
-import hashlib
-import runpy
-from pysatl import Utils
 
 from vaser import Vaser
 
@@ -23,45 +19,3 @@ def parse_test_args():
     return args.helper
 
 
-def check_test_case(args, chunk, *, fragment=False, last=True, **kwargs):
-    logging.info(f'args: {args}')
-    if chunk.args != args:
-        logging.error(f'args:       {args}')
-        logging.error(f'chunk.args: {chunk.args}')
-        raise RuntimeError()
-    if fragment != chunk.fragment:
-        logging.error(f'fragment:       {fragment}')
-        logging.error(f'chunk.fragment: {chunk.fragment}')
-        raise RuntimeError()
-    if last != chunk.last:
-        raise RuntimeError()
-
-    logging.info(f'bytes: {Utils.hexstr(chunk.as_bytes)}')
-
-    # check the serialized version can be decoded and match the original
-    raw_bytes = chunk.as_bytes
-    decoded, consumed = Vaser.decode(raw_bytes, **kwargs)
-    logging.debug(f'consumed: {consumed} bytes ({consumed*8} bits)')
-    logging.debug(f'decoded: {Utils.hexstr(decoded.as_bytes)}')
-    logging.info(f'decoded: {decoded.args}')
-
-    decoded_and_converted_args = []
-    for i in range(len(args)):
-        if isinstance(args[i], int):
-            #compare as int
-            decoded_and_converted_args.append(int.from_bytes(decoded.args[i], byteorder='little')) 
-        else:
-            #compare as bytes
-            args[i] = bytes(args[i])
-            decoded_and_converted_args.append(decoded.args[i])
-    
-    if decoded_and_converted_args != args:
-        logging.error(f'decoded_and_converted_args: {decoded_and_converted_args}')
-        logging.error(f'args:                       {args}')
-        raise RuntimeError()
-    if fragment != decoded.fragment:
-        raise RuntimeError()
-    if last != decoded.last:
-        raise RuntimeError()
-    if consumed != len(raw_bytes):
-        raise RuntimeError()

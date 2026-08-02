@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PYTHON=python
+MODULE=test.cli_interop
+
+run_case() {
+  cmd="$PYTHON -m $MODULE --c-impl ./test-vaser $*"
+  echo "Running: $cmd"
+  $cmd
+  echo
+}
+
+# Single-chunk cases
+run_case null last
+run_case 010203 last
+run_case deadbeef
+
+# Multi-chunk cases covering next and last
+run_case 010203 next 0405 last
+run_case null next 010203 next 0405 last
+
+# Fragment and last, plus keyword coverage
+run_case null fragment 010203 next 0405 last
+
+# Granularity case uses explicit padding behavior
+run_case --granularity 2 010203 next 0405 last
+run_case --granularity 4 010203 next 0405 last
+run_case --granularity 8 010203 next 0405 last
+
+# 2 lists
+run_case 010203 next 0405 last 060708 next 090a last
+
+echo "All CLI interop cases passed."

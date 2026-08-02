@@ -17,9 +17,7 @@ void error_handler(uint32_t error_code){
     exit(1);
 }
  
-#ifndef DEFAULT_GRANULARITY
 #define DEFAULT_GRANULARITY 1
-#endif
 
 unsigned int g_granularity = DEFAULT_GRANULARITY;
 
