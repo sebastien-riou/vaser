@@ -3,4 +3,4 @@
 set -ex
 
 clang -g -O0 -std=gnu17 -I./libvaser/include ./test/main.c -o test-vaser 
-clang -g -O0 -std=gnu17 ./test/device2stdout.c -o device2stdout
+clang -g -O0 -std=gnu17 -D_XOPEN_SOURCE=800 -D_DEFAULT_SOURCE ./test/device2stdout.c -o device2stdout
